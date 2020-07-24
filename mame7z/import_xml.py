@@ -1,45 +1,69 @@
 import os.path
 import xml.etree.ElementTree as ET
-from functools import reduce
+from collections import namedtuple
+
+
+def _tag_iterator(iterparse, tag):
+    for _, e in iterparse:
+        if e.tag == tag:
+            yield e
+
+def _find_recursively(element, func_select):
+    for child in element.getchildren():
+        if func_select(child):
+            yield child
+        else:
+            yield from _find_recursively(child, func_select)
+
+
+Rom = namedtuple('Rom', ('sha1', 'archive_name', 'file_name'))
+def _format_rom(item, rom, parent=''):
+    folder_name = item.get('name') if parent else ''
+    return Rom(
+        sha1=rom.get('sha1'),
+        archive_name=parent or item.get('name'),
+        file_name=os.path.join(folder_name, rom.get('name'))
+    )
+
 
 def mame_parser():
     return ET.iterparse('/Users/allancallaghan/Applications/mame/mame.xml')
 
-#def reduce_bios(bioss, i):
-#    _, e = i
-#    if e.tag == 'machine' and e.get('isbios') == 'yes':
-#        bioss.add(e.get('name'))
-#    return bioss
-#bioss = reduce(reduce_bios, mame_parser(), set())
-
-
-def machine_iterator():
-    for _, e in mame_parser():
-        if e.tag == 'machine':
-            yield e
-
-
-def print_roms_for_machine(machine):
+def _files_for_machine(machine, parents_to_exclude={}):
     for rom in machine.findall('rom'):
         if rom.get('merge') or rom.get('status') == "nodump":
             continue
-        parent = machine.get('romof') if machine.get('romof') not in bioss else ''
-        archive_name = parent or machine.get('name')
-        folder_name = machine.get('name') if parent else ''
-        file_name = os.path.join(folder_name, rom.get('name'))
-        sha1 = rom.get('sha1')
-        assert sha1
-        print(f"{sha1} {archive_name}:{file_name}")
+        yield _format_rom(
+            item=machine,
+            rom=rom,
+            parent=machine.get('romof') if machine.get('romof') not in parents_to_exclude else ''
+        )
+
+def do_mame():
+    bioss = set()
+    for machine in _tag_iterator(mame_parser(), 'machine'):
+        if machine.get('isbios') == 'yes':
+            bioss.add(machine.get('name'))
+            yield from _files_for_machine(machine, parents_to_exclude=bioss)
+    for machine in _tag_iterator(mame_parser(), 'machine'):
+        yield from _files_for_machine(machine, parents_to_exclude=bioss)
 
 
-bioss = set()
-for machine in machine_iterator():
-    if machine.get('isbios') == 'yes':
-        bioss.add(machine.get('name'))
-        print_roms_for_machine(machine)
 
-#bioss = {'isgsm', '3dobios', 'coh1000a', 'coh1002e', 'coh1002m', 'taitotz', 'allied', 'coh3002t', 'chihiro', 'kviper', 'f355bios', 'segasp', 'gp_110', 'konamigv', 'cdibios', 'gts1s', 'hng64', 'megaplay', 'aristmk5', 'lindbios', 'mac2bios', 'coh1000t', 'bubsys', 'su2000', 'coh3002c', 'decocass', 'macsbios', 'pyson', 'shtzone', 'maxaflex', 'f355dlx', 'gts1', 'ar_bios', 'aristmk6', 'naomi2', 'coh1001l', 'hod2bios', 'coh1000c', 'awbios', 'alg3do', 'galgbios', 'gq863', 'nichidvd', 'megatech', 'sfcbox', 'konamigx', 'naomi', 'sys246', 'naomigd', 'cubo', 'cedmag', 'alg_bios', 'iteagle', 'pgm', 'sys256', 'triforce', 'v4bios', 'nss', 'airlbios', 'skns', 'coh1000w', 'konendev', 'neogeo', 'atarisy1', 'playch10', 'sys573', 'coh1002v', 'crysbios', 'aleck64', 'tourvis', 'hikaru', 'stvbios', 'sammymdl'}
+def software_parser():
+    return ET.iterparse('/Users/allancallaghan/Applications/mame/hash/sms.xml')
 
+def _files_for_software(software):
+    for rom in _find_recursively(software, lambda e: e.tag == 'rom'):
+        yield _format_rom(
+            item=software,
+            rom=rom,
+            parent=software.get('cloneof') or ''
+        )
 
-for machine in machine_iterator():
-    print_roms_for_machine(machine)
+def do_software():
+    for software in _tag_iterator(software_parser(), 'software'):
+        yield from _files_for_software(software)
+
+for f in do_mame():
+    print(f"{f.sha1} {f.archive_name}:{f.file_name}")
