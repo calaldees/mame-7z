@@ -1,6 +1,7 @@
 import os.path
 import xml.etree.ElementTree as ET
 from collections import namedtuple
+from itertools import chain
 
 import io
 import subprocess
@@ -20,11 +21,11 @@ def _find_recursively(element, func_select):
 
 
 Rom = namedtuple('Rom', ('sha1', 'archive_name', 'file_name'))
-def _format_rom(item, rom, parent=''):
+def _format_rom(item, rom, parent='', folder=''):
     folder_name = item.get('name') if parent else ''
     return Rom(
         sha1=rom.get('sha1'),
-        archive_name=parent or item.get('name'),
+        archive_name=os.path.join(folder, parent or item.get('name')),
         file_name=os.path.join(folder_name, rom.get('name'))
     )
 
@@ -44,6 +45,7 @@ def _mame_xml(*args, events=('end',)):
         events=events,
     )
 
+
 def _files_for_machine(machine, parents_to_exclude={}):
     for rom in machine.findall('rom'):
         if rom.get('merge') or rom.get('status') == "nodump":
@@ -53,8 +55,7 @@ def _files_for_machine(machine, parents_to_exclude={}):
             rom=rom,
             parent=machine.get('romof') if machine.get('romof') not in parents_to_exclude else ''
         )
-
-def do_mame():
+def iter_mame():
     bioss = set()
     for machine in _tag_iterator(_mame_xml('-listxml'), 'machine'):
         if machine.get('isbios') == 'yes':
@@ -68,24 +69,21 @@ def do_mame():
 #def software_parser():
 #    return ET.iterparse('/Users/allancallaghan/Applications/mame/hash/sms.xml')
 
-def _files_for_software(current_softwarelist, element_software):
-    for rom in _find_recursively(element_software, lambda e: e.tag == 'rom'):
-        yield _format_rom(
-            item=element_software,
-            rom=rom,
-            parent=element_software.get('cloneof') or ''
-        )
-
-def do_software():
+def iter_software():
     iterparse = _mame_xml('-getsoftlist', events=('start', 'end'))
     current_softwarelist = ''
     for event, e in iterparse:
         if event == 'start' and e.tag == 'softwarelist':
             current_softwarelist = e.get('name')
         if event == 'end' and e.tag == 'software':
-            yield from _files_for_software(current_softwarelist, e)
+            for rom in _find_recursively(e, lambda e: e.tag == 'rom'):
+                yield _format_rom(
+                    item=e,
+                    rom=rom,
+                    parent=e.get('cloneof') or '',
+                    folder=current_softwarelist,
+                )
 
-    #for software in _tag_iterator(_mame_xml('-getsoftlist'), 'software'):
 
-for f in do_software():
+for f in chain(iter_mame(), iter_software()):
     print(f"{f.sha1} {f.archive_name}:{f.file_name}")
