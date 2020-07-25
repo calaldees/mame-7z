@@ -2,6 +2,9 @@ import os.path
 import xml.etree.ElementTree as ET
 from collections import namedtuple
 
+import io
+import subprocess
+
 
 def _tag_iterator(iterparse, tag):
     for _, e in iterparse:
@@ -26,8 +29,20 @@ def _format_rom(item, rom, parent=''):
     )
 
 
-def mame_parser():
-    return ET.iterparse('/Users/allancallaghan/Applications/mame/mame.xml')
+def _mame_xml(*args, events=('end',)):
+    """
+    `-listxml`
+    `-getsoftlist`
+    """
+    assert args == ('-listxml',) or args == ('-getsoftlist',), f'{args=}'
+    return ET.iterparse(
+        source=subprocess.Popen(
+            ("mame", *args),
+            stdout=subprocess.PIPE,
+            cwd='/Users/allancallaghan/Applications/mame/'
+        ).stdout,
+        events=events,
+    )
 
 def _files_for_machine(machine, parents_to_exclude={}):
     for rom in machine.findall('rom'):
@@ -41,29 +56,36 @@ def _files_for_machine(machine, parents_to_exclude={}):
 
 def do_mame():
     bioss = set()
-    for machine in _tag_iterator(mame_parser(), 'machine'):
+    for machine in _tag_iterator(_mame_xml('-listxml'), 'machine'):
         if machine.get('isbios') == 'yes':
             bioss.add(machine.get('name'))
-            yield from _files_for_machine(machine, parents_to_exclude=bioss)
-    for machine in _tag_iterator(mame_parser(), 'machine'):
+            yield from _files_for_machine(machine)
+    for machine in _tag_iterator(_mame_xml('-listxml'), 'machine'):
         yield from _files_for_machine(machine, parents_to_exclude=bioss)
 
 
 
-def software_parser():
-    return ET.iterparse('/Users/allancallaghan/Applications/mame/hash/sms.xml')
+#def software_parser():
+#    return ET.iterparse('/Users/allancallaghan/Applications/mame/hash/sms.xml')
 
-def _files_for_software(software):
-    for rom in _find_recursively(software, lambda e: e.tag == 'rom'):
+def _files_for_software(current_softwarelist, element_software):
+    for rom in _find_recursively(element_software, lambda e: e.tag == 'rom'):
         yield _format_rom(
-            item=software,
+            item=element_software,
             rom=rom,
-            parent=software.get('cloneof') or ''
+            parent=element_software.get('cloneof') or ''
         )
 
 def do_software():
-    for software in _tag_iterator(software_parser(), 'software'):
-        yield from _files_for_software(software)
+    iterparse = _mame_xml('-getsoftlist', events=('start', 'end'))
+    current_softwarelist = ''
+    for event, e in iterparse:
+        if event == 'start' and e.tag == 'softwarelist':
+            current_softwarelist = e.get('name')
+        if event == 'end' and e.tag == 'software':
+            yield from _files_for_software(current_softwarelist, e)
 
-for f in do_mame():
+    #for software in _tag_iterator(_mame_xml('-getsoftlist'), 'software'):
+
+for f in do_software():
     print(f"{f.sha1} {f.archive_name}:{f.file_name}")
