@@ -3,10 +3,7 @@ import xml.etree.ElementTree as ET
 from typing import NamedTuple
 from itertools import chain
 import subprocess
-
-
-PATH_MAME = '/Users/allancallaghan/Applications/mame/'
-CMD_MAME = 'mame'
+from zipfile import ZipFile
 
 
 def _tag_iterator(iterparse, tag):
@@ -41,20 +38,19 @@ class Rom(NamedTuple):
 
 
 
-def _mame_xml(*args, events=('end',)):
+PATH_MAME = '/Users/allancallaghan/Applications/mame/'
+def _cmd_mame(*args, PATH=PATH_MAME, CMD='mame'):
     """
     `-listxml`
     `-getsoftlist`
     """
     assert args == ('-listxml',) or args == ('-getsoftlist',), f'{args=}'
-    return ET.iterparse(
-        source=subprocess.Popen(
-            (CMD_MAME, *args),
-            stdout=subprocess.PIPE,
-            cwd=PATH_MAME,
-        ).stdout,
-        events=events,
-    )
+    return subprocess.Popen(
+        (CMD, *args),
+        stdout=subprocess.PIPE,
+        cwd=PATH,
+    ).stdout
+
 
 
 def _files_for_machine(machine, parents_to_exclude={}):
@@ -68,7 +64,7 @@ def _files_for_machine(machine, parents_to_exclude={}):
             rom=rom,
             parent=machine.get('romof') if machine.get('romof') not in parents_to_exclude else ''
         )
-def iter_mame():
+def iter_mame(get_xml_filehandle):
     r"""
     >>> data = '''<?xml version="1.0"?>
     ... <mame build="0.222 (unknown)" debug="no" mameconfig="10">
@@ -86,22 +82,23 @@ def iter_mame():
     ...         <rom name="epr-21576h.ic27" bios="bios0" sha1="91424d481ff99a8d3f4c45cea6d3f0eada049a6d"/>
     ...     </machine>
     ... </mame>'''.encode('utf8')
-    >>> from unittest.mock import patch
-    >>> with patch('subprocess.Popen') as mock_popen:
-    ...    mock_popen.return_value.stdout.read.side_effect = (data, b'', data, b'')
-    ...    tuple(map(str, iter_mame()))
+    >>> from unittest.mock import MagicMock
+    >>> mock_filehandle = MagicMock()
+    >>> mock_filehandle.return_value.read.side_effect = (data, b'', data, b'')
+    >>> tuple(map(str, iter_mame(mock_filehandle)))
     ('91424d481ff99a8d3f4c45cea6d3f0eada049a6d naomi:epr-21576h.ic27', '2f32caf3906fc1408fd8126a500e74c682ff20fa 18wheelr:epr-22185a.ic22', '6db3bfa23246c250e334bbd54dcb5038a2d18dbc 18wheelr:18wheelro/epr-22185.ic22')
     """
+    assert callable(get_xml_filehandle)
     bioss = set()
-    for machine in _tag_iterator(_mame_xml('-listxml'), 'machine'):
+    for machine in _tag_iterator(ET.iterparse(get_xml_filehandle()), 'machine'):
         if machine.get('isbios') == 'yes':
             bioss.add(machine.get('name'))
             yield from _files_for_machine(machine)
-    for machine in _tag_iterator(_mame_xml('-listxml'), 'machine'):
+    for machine in _tag_iterator(ET.iterparse(get_xml_filehandle()), 'machine'):
         yield from _files_for_machine(machine, parents_to_exclude=bioss)
 
 
-def iter_software():
+def iter_software(get_xml_filehandle):
     r"""
     >>> data = '''<?xml version="1.0"?>
     ... <softwarelists>
@@ -122,19 +119,23 @@ def iter_software():
     ...         </software>
     ...     </softwarelist>
     ... </softwarelists>'''.encode('utf8')
-    >>> from unittest.mock import patch
-    >>> with patch('subprocess.Popen') as mock_popen:
-    ...    mock_popen.return_value.stdout.read.side_effect = (data, b'')
-    ...    tuple(map(str, iter_software()))
+    >>> from unittest.mock import MagicMock
+    >>> mock_filehandle = MagicMock()
+    >>> mock_filehandle.return_value.read.side_effect = (data, b'')
+    >>> tuple(map(str, iter_software(mock_filehandle)))
     ('6d052e0cca3f2712434efd856f733c03011be41c sms/alexkidd:alex kidd in miracle world (usa, europe) (v1.1).bin', '8cecf8ed0f765163b2657be1b0a3ce2a9cb767f4 sms/alexkidd:alexkidd1/alex kidd in miracle world (usa, europe).bin')
     """
-    iterparse = _mame_xml('-getsoftlist', events=('start', 'end'))
+    callable(get_xml_filehandle)
+    iterparse = ET.iterparse(source=get_xml_filehandle(), events=('start', 'end'))
     current_softwarelist = ''
     for event, e in iterparse:
         if event == 'start' and e.tag == 'softwarelist':
             current_softwarelist = e.get('name')
         if event == 'end' and e.tag == 'software':
             for rom in _find_recursively(e, lambda e: e.tag == 'rom'):
+                if not rom.get('name'):
+                    # log.warning(f"software {e.get('name')} has a rom with no name?")
+                    continue
                 yield Rom.from_xml_rom(
                     item=e,
                     rom=rom,
@@ -142,7 +143,46 @@ def iter_software():
                     folder=current_softwarelist,
                 )
 
+def _zip_filehandle(filename):
+    #with ZipFile(filename) as zipfile:
+    zipfile = ZipFile(filename)
+    _filename = zipfile.namelist()[0]
+    #with zipfile.open(_filename) as filehandle:
+    filehandle = zipfile.open(_filename)
+    return filehandle
+
+def iter_software_zip(filename):
+    with ZipFile(filename) as zipfile:
+        for _filename in zipfile.namelist():
+            if _filename.endswith('.xml'):
+                with zipfile.open(_filename) as filehandle:
+                    yield from iter_software(lambda: filehandle)
+
+#/Users/allancallaghan/Downloads/mame0222lx.zip
+#/Users/allancallaghan/Applications/mame/hash.zip
+
+def main():
+    for rom in chain(
+        iter_mame(lambda: _zip_filehandle('mamelx.zip')),
+        iter_software_zip('hash.zip'),
+        #iter_mame(lambda: _cmd_mame('-listxml')),
+        #iter_software(lambda: _cmd_mame('-getsoftlist'))
+        #iter_software_zip('/Users/allancallaghan/Applications/mame/hash.zip')
+    ):
+        print(rom)
+
+
+# def postmortem(func, *args, **kwargs):
+#     import traceback
+#     import pdb
+#     import sys
+#     try:
+#         return func(*args, **kwargs)
+#     except Exception:
+#         type, value, tb = sys.exc_info()
+#         traceback.print_exc()
+#         pdb.post_mortem(tb)
 
 if __name__ == "__main__":
-    for rom in chain(iter_mame(), iter_software()):
-        print(rom)
+    #postmortem(main)
+    main()
