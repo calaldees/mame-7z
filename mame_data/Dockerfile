@@ -1,7 +1,7 @@
 FROM python:alpine as base
 
 ARG WORKDIR=/mame
-ENV WORKDIR=${WORKDIR}}
+ENV WORKDIR=${WORKDIR}
 RUN mkdir -p ${WORKDIR}
 WORKDIR ${WORKDIR}
 
@@ -11,21 +11,25 @@ FROM base as tools
         subversion \
         zip \
         python3 \
-&& true
+    && true
+    COPY requirements.txt ./
+    RUN pip3 install -r requirements.txt
+
+FROM tools as test
+    COPY *.py ./
+    RUN pip install pytest
+    RUN pytest --doctest-modules
 
 FROM tools as xml
     ARG TAG=mame0222
     ENV TAG=${TAG}
     RUN curl -L "https://github.com/mamedev/mame/releases/download/${TAG}/${TAG}lx.zip" -o mamelx.zip
     # svn reference - https://stackoverflow.com/a/18324458/3356840
-    RUN svn export https://github.com/mamedev/mame.git/tags/${TAG}/hash
-    # TODO: combine with line above
-    RUN zip hash.zip -r hash/ && rm -rf hash/
-
-FROM tools as test
-    COPY parse_xml.py ./
-    RUN pip install pytest
-    RUN pytest --doctest-modules parse_xml.py
+    RUN \
+        svn export https://github.com/mamedev/mame.git/tags/${TAG}/hash &&\
+        zip hash.zip -r hash/ &&\
+        rm -rf hash/ &&\
+    true
 
 FROM xml as parse
     COPY parse_xml.py ./
@@ -35,3 +39,9 @@ FROM xml as parse
 
 FROM base as data
     COPY --from=parse ${WORKDIR}/roms.txt ${WORKDIR}/
+
+FROM data as api
+    COPY api.py ./
+    EXPOSE 9001
+    CMD ["python3", "api.py", "--port=9001"]
+    #HEALTHCHECK

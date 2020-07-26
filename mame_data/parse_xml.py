@@ -4,6 +4,7 @@ from typing import NamedTuple
 from itertools import chain
 import subprocess
 from zipfile import ZipFile
+import re
 
 
 def _tag_iterator(iterparse, tag):
@@ -32,6 +33,15 @@ class Rom(NamedTuple):
             archive_name=os.path.join(folder, parent or item.get('name')),
             file_name=os.path.join(folder_name, rom.get('name'))
         )
+
+    @staticmethod
+    def parse(line):
+        match = re.match(
+            r"""(?P<sha1>[0-9A-Fa-f]{40}) (?P<archive_name>.+):(?P<file_name>.+)""",
+            line,
+        )
+        if match:
+            return Rom(**match.groupdict())
 
     def __str__(self) -> str:
         return f"{self.sha1} {self.archive_name}:{self.file_name}"
