@@ -114,6 +114,7 @@ def iter_software(get_xml_filehandle):
     ...                 <part name="cart" interface="sms_cart">
     ...                         <dataarea name="rom">
     ...                             <rom name="alex kidd in miracle world (usa, europe).bin" sha1="8cecf8ed0f765163b2657be1b0a3ce2a9cb767f4"/>
+    ...                             <rom test="no name in field list" />
     ...                         </dataarea>
     ...                 </part>
     ...         </software>
