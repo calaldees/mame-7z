@@ -5,31 +5,30 @@ ENV WORKDIR=${WORKDIR}
 RUN mkdir -p ${WORKDIR}
 WORKDIR ${WORKDIR}
 
-FROM base as tools
+FROM base as xml
     RUN apk add \
         curl \
         subversion \
         zip \
-        python3 \
     && true
-    COPY requirements.txt ./
-    RUN pip3 install -r requirements.txt
-
-FROM tools as test
-    COPY *.py ./
-    RUN pip install pytest
-    RUN pytest --doctest-modules
-
-FROM tools as xml
     ARG TAG=mame0222
     ENV TAG=${TAG}
     RUN curl -L "https://github.com/mamedev/mame/releases/download/${TAG}/${TAG}lx.zip" -o mamelx.zip
-    # svn reference - https://stackoverflow.com/a/18324458/3356840
+    # `svn export` reference - https://stackoverflow.com/a/18324458/3356840
     RUN \
         svn export https://github.com/mamedev/mame.git/tags/${TAG}/hash &&\
         zip hash.zip -r hash/ &&\
         rm -rf hash/ &&\
     true
+
+FROM base as install
+    COPY requirements.txt ./
+    RUN pip3 install -r requirements.txt
+
+FROM install as test
+    RUN pip3 install pytest
+    COPY *.py ./
+    RUN pytest --doctest-modules
 
 FROM xml as parse
     COPY parse_xml.py ./
@@ -37,11 +36,9 @@ FROM xml as parse
     #  `&& zip roms.zip roms.txt` no real need for this - most of it is hash's which don't compress 29MB -> 12MB
     RUN set -o pipefail && python3 parse_xml.py > roms.txt
 
-FROM base as data
+FROM install as api
     COPY --from=parse ${WORKDIR}/roms.txt ${WORKDIR}/
-
-FROM data as api
     COPY api.py ./
     EXPOSE 9001
-    CMD ["python3", "api.py", "--port=9001"]
+    CMD ["python3", "api.py", "roms.txt", "--port=9001"]
     #HEALTHCHECK
