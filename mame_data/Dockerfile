@@ -38,7 +38,7 @@ FROM xml as parse
 
 FROM install as api
     COPY --from=parse ${WORKDIR}/roms.txt ${WORKDIR}/
-    COPY api.py ./
+    COPY api.py parse_xml.py ./
     EXPOSE 9001
     CMD ["python3", "api.py", "roms.txt", "--port=9001"]
     #HEALTHCHECK
