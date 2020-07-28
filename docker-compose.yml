@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+    rom_data:
+        build:
+            context: ./rom_data
+            args:
+                GIT_TAG: mame0222
+    decompress:
+        build:
+            context: ./compression_tools
+            target: decompress
+    hash_files:
+        build:
+            context: ./compression_tools
+            target: hash
+    compress:
+        build:
+            context: ./compression_tools
+            target: compress
+
+volumes:
+    rebuild:
+    verify:
+    hash_files:
+    hash_store:
+    compress:

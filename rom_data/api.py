@@ -17,15 +17,22 @@ log = logging.getLogger(__name__)
 # ------------------------------------------------------------------------------
 
 class RomData():
+    """
+    Romdata for 364682 in python3 memory takes 185Mb RAM
+    """
     def __init__(self, filehandle):
         sha1 = {}
         archive = defaultdict(set)
         log.info('Loading rom data ...')
-        for rom in filter(None, map(Rom.parse, filehandle)):
+        for count, rom in enumerate(filter(None, map(Rom.parse, filehandle))):
             sha1[rom.sha1] = rom
             archive[rom.archive_name].add(rom)
+            if count % 10000 == 0:
+                print('.', end='', flush=True)
+        print()
         self.sha1 = MappingProxyType(sha1)
         self.archive = MappingProxyType(archive)
+        log.info(f'Loaded dataset for {count} roms')
 
 
 # Request Handler --------------------------------------------------------------

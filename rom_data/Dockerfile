@@ -11,12 +11,12 @@ FROM base as xml
         subversion \
         zip \
     && true
-    ARG TAG=mame0222
-    ENV TAG=${TAG}
-    RUN curl -L "https://github.com/mamedev/mame/releases/download/${TAG}/${TAG}lx.zip" -o mamelx.zip
+    ARG GIT_TAG
+    ENV GIT_TAG=${GIT_TAG}
+    RUN curl -L "https://github.com/mamedev/mame/releases/download/${GIT_TAG}/${GIT_TAG}lx.zip" -o mamelx.zip
     # `svn export` reference - https://stackoverflow.com/a/18324458/3356840
     RUN \
-        svn export https://github.com/mamedev/mame.git/tags/${TAG}/hash &&\
+        svn export https://github.com/mamedev/mame.git/tags/${GIT_TAG}/hash &&\
         zip hash.zip -r hash/ &&\
         rm -rf hash/ &&\
     true

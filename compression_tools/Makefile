@@ -1,4 +1,4 @@
-DOCKER_IMAGE:=mame_data
+DOCKER_IMAGE:=compression_tools
 
 build:
 	docker build \
@@ -7,10 +7,8 @@ build:
 
 shell:
 	docker run --rm -it \
-		--publish 9001:9001 \
 		${DOCKER_IMAGE} \
 		/bin/sh
 run:
 	docker run --rm -it \
-		--publish 9001:9001 \
 		${DOCKER_IMAGE}
