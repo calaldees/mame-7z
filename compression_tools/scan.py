@@ -3,6 +3,7 @@ import os
 import collections
 from functools import partial
 from itertools import chain
+from typing import NamedTuple
 
 import logging
 log = logging.getLogger(__name__)
@@ -49,28 +50,51 @@ def fast_scan_regex_filter(file_regex=None, ignore_regex=DEFAULT_IGNORE_REGEX):
     return lambda f: file_regex.search(f) and not ignore_regex.search(f)
 
 
-FileScan = collections.namedtuple('FileScan', ('folder', 'file', 'path', 'abspath', 'relative', 'stats', 'ext', 'file_no_ext', 'exists'))
+class FileScan(NamedTuple):
+    scan_root: str
+    scan_path: str
+    scan_dir_entry: object
+    @property
+    def folder(self):
+        return self.scan_path
+    @property
+    def file(self):
+        return self.scan_dir_entry.name
+    @property
+    def path(self):
+        return self.scan_dir_entry.path
+    @property
+    def abspath(self):
+        return os.path.abspath(self.path)
+    @property
+    def relative(self):
+        return self.path.replace(self.scan_root, '').strip('/')
+    @property
+    def ext(self):
+        _, ext = file_ext(self.scan_dir_entry.name)
+        return ext
+    @property
+    def file_no_ext(self):
+        file_no_ext, _ = file_ext(self.scan_dir_entry.name)
+        return file_no_ext
+    @property
+    def exists(self):
+        return os.path.exists(self.abspath)
+    @property
+    def stats(self):
+        return self.scan_dir_entry.stat()
+
 def fast_scan(root, path=None, search_filter=fast_scan_regex_filter()):
     path = path or ''
     _path = os.path.join(root, path)
     if not os.path.isdir(_path):
-        log.warning(f'{path} is not a directory - aborting scan')
+        log.warning(f'{path} is not an existing directory - aborting scan')
         return
     with os.scandir(_path) as scanner:
         for dir_entry in scanner:
-            _relative = dir_entry.path.replace(root, '').strip('/')
-            if (dir_entry.is_file() or dir_entry.is_symlink()) and search_filter(_relative):  # .is_symlink is dangerious, as symlinks can also be folders
-                file_no_ext, ext = file_ext(dir_entry.name)
-                yield FileScan(
-                    folder=path,
-                    file=dir_entry.name,
-                    path=dir_entry.path,
-                    abspath=os.path.abspath(dir_entry.path),
-                    relative=_relative,
-                    stats=dir_entry.stat,
-                    ext=ext,
-                    file_no_ext=file_no_ext,
-                    exists=partial(os.path.exists, dir_entry.name)
-                )
+            if (dir_entry.is_file() or dir_entry.is_symlink()):  # BUG: .is_symlink is dangerous, as symlinks can also be folders
+                _filescan = FileScan(root, path, dir_entry)
+                if search_filter(_filescan.relative):
+                    yield _filescan
             if dir_entry.is_dir():
                 yield from fast_scan(root, os.path.join(path, dir_entry.name), search_filter)

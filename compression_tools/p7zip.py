@@ -73,7 +73,7 @@ class P7Zip():
         assert os.path.isfile(destination_file)
 
     def extract(self, cwd, source_file, destination_folder='./'):
-        assert source_file.endswith('.7z')
+        #assert source_file.endswith('.7z')
         assert os.path.isfile(os.path.join(cwd, source_file))
         assert os.path.isdir(os.path.join(cwd, destination_folder))
         output = subprocess.run(
