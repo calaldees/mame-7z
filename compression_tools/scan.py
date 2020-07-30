@@ -49,10 +49,14 @@ def fast_scan_regex_filter(file_regex=None, ignore_regex=DEFAULT_IGNORE_REGEX):
     return lambda f: file_regex.search(f) and not ignore_regex.search(f)
 
 
-FileScan = collections.namedtuple('FileScan', ('folder', 'file', 'path', 'abspath', 'relative', 'stats', 'ext', 'file_no_ext'))
+FileScan = collections.namedtuple('FileScan', ('folder', 'file', 'path', 'abspath', 'relative', 'stats', 'ext', 'file_no_ext', 'exists'))
 def fast_scan(root, path=None, search_filter=fast_scan_regex_filter()):
     path = path or ''
-    with os.scandir(os.path.join(root, path)) as scanner:
+    _path = os.path.join(root, path)
+    if not os.path.isdir(_path):
+        log.warning(f'{path} is not a directory - aborting scan')
+        return
+    with os.scandir(_path) as scanner:
         for dir_entry in scanner:
             _relative = dir_entry.path.replace(root, '').strip('/')
             if (dir_entry.is_file() or dir_entry.is_symlink()) and search_filter(_relative):  # .is_symlink is dangerious, as symlinks can also be folders
@@ -63,10 +67,10 @@ def fast_scan(root, path=None, search_filter=fast_scan_regex_filter()):
                     path=dir_entry.path,
                     abspath=os.path.abspath(dir_entry.path),
                     relative=_relative,
-                    stats=dir_entry.stat(),
+                    stats=dir_entry.stat,
                     ext=ext,
                     file_no_ext=file_no_ext,
+                    exists=partial(os.path.exists, dir_entry.name)
                 )
             if dir_entry.is_dir():
-                for sub_dir_entry in fast_scan(root, os.path.join(path, dir_entry.name), search_filter):
-                    yield sub_dir_entry
+                yield from fast_scan(root, os.path.join(path, dir_entry.name), search_filter)

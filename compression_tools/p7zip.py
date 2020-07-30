@@ -7,20 +7,50 @@ log = logging.getLogger(__name__)
 
 
 class P7Zip():
-    """
+    r"""
     Simplified opinionated wrapper for 7z
+
+    >>> import tempfile
+    >>> temp_directory1 = tempfile.TemporaryDirectory()
+    >>> temp_directory2 = tempfile.TemporaryDirectory()
+    >>> temp_directory3 = tempfile.TemporaryDirectory()
+
+    >>> source_file = os.path.abspath(os.path.join(temp_directory1.name, './test/test.txt'))
+    >>> os.makedirs(os.path.dirname(source_file))
+    >>> with open(source_file, 'wt') as filehandle:
+    ...     _ = filehandle.write('abcdefghijklmnopqrstuvwxyz\n')
+
+    >>> P7Zip().hash(
+    ...     cwd=temp_directory1.name,
+    ...     source=source_file,
+    ... )
+    '8c723a0fa70b111017b4a6f06afe1c0dbcec14e3'
+
+    >>> compressed_file = os.path.join(temp_directory2.name, 'test.7z')
+    >>> P7Zip().compress(
+    ...     cwd=temp_directory1.name,
+    ...     files=('test/test.txt',),
+    ...     destination_file=compressed_file,
+    ... )
+
+    >>> P7Zip().extract(
+    ...     cwd=temp_directory3.name,
+    ...     source_file=compressed_file,
+    ... )
+    >>> assert os.path.isfile(os.path.join(temp_directory3.name, 'test/test.txt'))
+
+    >>> temp_directory1.cleanup()
+    >>> temp_directory2.cleanup()
+    >>> temp_directory3.cleanup()
     """
 
     REGEX_HASH_SHA1 = re.compile(b'[A-Fa-f0-9]{40}')
 
-    def hash(self, source):
-        """
-        >>> P7Zip().hash('./test/test.txt')
-        '8c723a0fa70b111017b4a6f06afe1c0dbcec14e3'
-        """
-        assert os.path.isfile(source)
+    def hash(self, cwd, source):
+        assert os.path.isfile(os.path.abspath(os.path.join(cwd, source)))
         output = subprocess.run(
             ("7z", "h", "-scrcSHA1", source),
+            cwd=cwd,
             capture_output=True,
         )
         match = self.REGEX_HASH_SHA1.search(output.stdout)
@@ -29,24 +59,6 @@ class P7Zip():
         log.error(f'Unable to hash {source}')
 
     def compress(self, cwd, files, destination_file):
-        """
-        >>> import tempfile
-        >>> temp_directory1 = tempfile.TemporaryDirectory()
-        >>> compressed_file = os.path.join(temp_directory1.name, 'test.7z')
-        >>> P7Zip().compress(
-        ...     cwd='./',
-        ...     files=('test/test.txt',),
-        ...     destination_file=compressed_file
-        ... )
-        >>> temp_directory2 = tempfile.TemporaryDirectory()
-        >>> P7Zip().extract(
-        ...     cwd=temp_directory2.name,
-        ...     source_file=compressed_file,
-        ... )
-        >>> assert os.path.isfile(os.path.join(temp_directory2.name, 'test/test.txt'))
-        >>> temp_directory1.cleanup()
-        >>> temp_directory2.cleanup()
-        """
         destination_file = os.path.abspath(destination_file)
         assert destination_file.endswith('.7z')
         assert os.path.isdir(os.path.dirname(destination_file))
