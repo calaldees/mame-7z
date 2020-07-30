@@ -82,21 +82,24 @@ class SetsResource():
             --data '["3c912300775d1ad730dc35757e279c274c0acaad", "bd50a6bb8fa9bac121b076e21ea048a83a240a48"]' \
             "http://localhost:9001/sets"
 
-        {"complete": {}, "incomplete": {"airlbios": ["bd50a6bb8fa9bac121b076e21ea048a83a240a48"], "3do": ["3c912300775d1ad730dc35757e279c274c0acaad"]}, "unknown": []}
+        {'roms': [{"airlbios": ["bd50a6bb8fa9bac121b076e21ea048a83a240a48"], "3do": ["3c912300775d1ad730dc35757e279c274c0acaad"]}, "unknown": []}
         """
-        response.media = {'complete': {}, 'incomplete': {}}
-        roms_sha1 = set(request.media)
-        roms = filter(None, map(lambda sha1: self.rom_data.sha1.get(sha1), request.media))
-        archive_names = set(rom.archive_name for rom in roms)
-        for archive_name in archive_names:
+        response.media = {'romsets': [], 'unknown': []}
+        input_sha1 = set(request.media)
+        input_roms = filter(None, map(lambda sha1: self.rom_data.sha1.get(sha1), input_sha1))
+        input_archive_names = set(rom.archive_name for rom in input_roms)
+        for archive_name in input_archive_names:
             archive_roms = self.rom_data.archive.get(archive_name)
             archive_sha1s = set(rom.sha1 for rom in archive_roms)
-            if archive_sha1s < roms_sha1:
-                response.media['complete'][archive_name] = tuple(archive_sha1s)
-            elif archive_sha1s_incomplete := archive_sha1s & roms_sha1:
-                response.media['incomplete'][archive_name] = tuple(archive_sha1s_incomplete)
-            roms_sha1 -= archive_sha1s
-        response.media['unknown'] = tuple(roms_sha1)
+            archive_sha1s_matched = archive_sha1s & input_sha1
+            response.media['romsets'].append({
+                'archive': archive_name,
+                'matched': tuple(archive_sha1s_matched),
+                'missing': tuple(archive_sha1s - archive_sha1s_matched),
+                'files': {rom.sha1: rom.file_name for rom in archive_roms},
+            })
+            input_sha1 -= archive_sha1s
+        response.media['unknown'] = tuple(input_sha1)
         response.status = falcon.HTTP_200
 
 

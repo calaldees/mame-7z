@@ -2,14 +2,25 @@ import os
 import tempfile
 from typing import NamedTuple
 
+import requests
+
 from scan import fast_scan
 from p7zip import P7Zip
+
 
 import logging
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
 p7zip = P7Zip()
+
+def request_verify(roms):
+    data = requests.get(
+        'http://localhost:9001/sets',
+        json=tuple(rom.sha1 for rom in roms),
+    ).json()
+    import pdb ; pdb.set_trace()
+    return len(data['romsets']) == 1 and not data['romsets']['missing']
 
 
 class Rom(NamedTuple):
@@ -36,6 +47,7 @@ def validate_file(f):
             )
             for rom_file in fast_scan(destination_folder)
         )
+        return request_verify(roms)
 
 
 def validate_folder(folder):
@@ -43,7 +55,7 @@ def validate_folder(folder):
         if not f.exists:
             log.warning(f'{f.relative} does not exist. The file may have been removed by another thread')
             continue
-        validate_file(f)
+        log.info(f'{f.relative}: {validate_file(f)}')
 
 
 if __name__ == '__main__':
