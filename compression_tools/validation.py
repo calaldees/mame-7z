@@ -14,18 +14,6 @@ logging.basicConfig(level=logging.INFO)
 
 p7zip = P7Zip()
 
-def request_verify(roms):
-    assert roms
-    archive_names = {rom.archive_name for rom in roms}
-    archive_name = archive_names.pop()
-    assert not archive_names, 'Multiple archives to verify?'
-    data = requests.get(
-        'http://localhost:9001/sets',
-        json=tuple(rom.sha1 for rom in roms),
-    ).json()
-    romset = data['romsets'].get(archive_name)
-    return romset and not romset['missing'] and not data['unknown']
-
 
 class Rom(NamedTuple):
     sha1: str
@@ -33,25 +21,42 @@ class Rom(NamedTuple):
     file_name: str
 
 
-def validate_file(f):
-    log.debug(f'validating {f.relative}')
+def validate_archive(f):
+    archive_name = os.path.join(f.folder, f.file_no_ext)
+    log.debug(f'validating {archive_name} {f.relative}')
     with tempfile.TemporaryDirectory() as tempdir:
-        destination_folder = os.path.abspath(os.path.join(tempdir, f.file_no_ext))
+        # Extract Archive - to tempdir
+        destination_folder = os.path.abspath(os.path.join(tempdir, archive_name))
         os.makedirs(destination_folder)
         p7zip.extract(
             cwd=tempdir,
             source_file=f.abspath,
             destination_folder=destination_folder,
         )
+        # Hash check archive content as Rom list
         roms = tuple(
             Rom(
                 sha1=p7zip.hash(tempdir, rom_file.abspath),
-                archive_name=os.path.join(f.folder, f.file_no_ext),
-                file_name=rom_file.relative
+                archive_name=archive_name,
+                file_name=rom_file.relative,
             )
             for rom_file in fast_scan(destination_folder)
         )
-        return request_verify(roms)
+    # Verify roms
+    data = requests.get(
+        'http://localhost:9001/sets',
+        json=tuple(rom.sha1 for rom in roms),
+    ).json()
+    romset = data['romsets'].get(archive_name)
+    return romset and not romset['missing'] and not data['unknown']
+    # TODO:
+    # incorrect rom name (check)
+    # incorrect archive_name? core+archive_name?
+    # missing
+    #  clone
+    # uneeded file
+    # file from another romset
+    # ok core - ok clones
 
 
 def validate_folder(folder):
@@ -59,7 +64,8 @@ def validate_folder(folder):
         if not f.exists:
             log.warning(f'{f.relative} does not exist. The file may have been removed by another thread')
             continue
-        log.info(f'{f.relative}: {validate_file(f)}')
+        is_valid = validate_archive(f)
+        log.info(f'{f.relative}: {is_valid=}')
 
 
 def postmortem(func, *args, **kwargs):
