@@ -2,6 +2,7 @@ import os.path
 import json
 import re
 import logging
+from itertools import chain
 from functools import reduce
 from collections import defaultdict
 from types import MappingProxyType # https://stackoverflow.com/questions/41795116/difference-between-mappingproxytype-and-pep-416-frozendict
@@ -22,11 +23,11 @@ class RomData():
     """
     def __init__(self, filehandle):
         sha1 = {}
-        archive = defaultdict(set)
+        archive = {}
         log.info('Loading rom data ...')
         for count, rom in enumerate(filter(None, map(Rom.parse, filehandle))):
-            sha1[rom.sha1] = rom
-            archive[rom.archive_name].add(rom)
+            sha1.setdefault(rom.sha1, set()).add(rom)
+            archive.setdefault(rom.archive_name, set()).add(rom)
             if count % 10000 == 0:
                 print('.', end='', flush=True)
         print()
@@ -46,27 +47,30 @@ class SHA1InfoResource():
     def __init__(self, rom_data):
         self.rom_data = rom_data
     def on_get(self, request, response, sha1):
-        rom = self.rom_data.sha1.get(sha1)
-        if not rom:
+        roms = self.rom_data.sha1.get(sha1)
+        if not roms:
             response.status = falcon.HTTP_404
             return
-        response.media = {'rom': rom._asdict()}
+        response.media = {'roms': tuple(rom._asdict() for rom in roms)}
         response.status = falcon.HTTP_200
 
 class ArchiveResource():
     def __init__(self, rom_data):
         self.rom_data = rom_data
     def on_get(self, request, response):
+        """
+        TODO: I don't like the return - multiple archives?
+        """
         archive_name = request.path.strip('/archive/')  # HACK! The prefix route needs to be removed .. damnit ...
         archive_roms = self.rom_data.archive.get(archive_name)
         if not archive_roms:
             response.status = falcon.HTTP_404
             return
         response.media = {
-            archive_name: {
+            #archive_name: {
                 rom.sha1: rom.file_name
                 for rom in archive_roms
-            }
+            #}
         }
         response.status = falcon.HTTP_200
 
@@ -84,22 +88,22 @@ class SetsResource():
 
         {'roms': [{"airlbios": ["bd50a6bb8fa9bac121b076e21ea048a83a240a48"], "3do": ["3c912300775d1ad730dc35757e279c274c0acaad"]}, "unknown": []}
         """
-        response.media = {'romsets': [], 'unknown': []}
+        response.media = {'romsets': {}, 'unknown': []}
         input_sha1 = set(request.media)
-        input_roms = filter(None, map(lambda sha1: self.rom_data.sha1.get(sha1), input_sha1))
+        input_roms = chain.from_iterable(filter(None, map(lambda sha1: self.rom_data.sha1.get(sha1), input_sha1)))
         input_archive_names = set(rom.archive_name for rom in input_roms)
+        matched_sha1 = set()
         for archive_name in input_archive_names:
             archive_roms = self.rom_data.archive.get(archive_name)
             archive_sha1s = set(rom.sha1 for rom in archive_roms)
             archive_sha1s_matched = archive_sha1s & input_sha1
-            response.media['romsets'].append({
-                'archive': archive_name,
+            response.media['romsets'][archive_name] = {
                 'matched': tuple(archive_sha1s_matched),
                 'missing': tuple(archive_sha1s - archive_sha1s_matched),
                 'files': {rom.sha1: rom.file_name for rom in archive_roms},
-            })
-            input_sha1 -= archive_sha1s
-        response.media['unknown'] = tuple(input_sha1)
+            }
+            matched_sha1 |= archive_sha1s_matched
+        response.media['unknown'] = tuple(input_sha1 - matched_sha1)
         response.status = falcon.HTTP_200
 
 
