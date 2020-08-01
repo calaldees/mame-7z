@@ -46,7 +46,7 @@ def validate_file(f):
         roms = tuple(
             Rom(
                 sha1=p7zip.hash(tempdir, rom_file.abspath),
-                archive_name=f.file_no_ext,
+                archive_name=os.path.join(f.folder, f.file_no_ext),
                 file_name=rom_file.relative
             )
             for rom_file in fast_scan(destination_folder)
