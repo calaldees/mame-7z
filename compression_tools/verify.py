@@ -24,8 +24,6 @@ class Rom(NamedTuple):
 
 
 def verify_results(archive_name, roms, data):
-    romset = data['romsets'].get(archive_name)
-
     _return = {}
     # Check archivename
     completed_archive_names = {
@@ -34,9 +32,17 @@ def verify_results(archive_name, roms, data):
     }
     if completed_archive_names and archive_name not in completed_archive_names:
         log.debug(f'incorrect_archivename: {archive_name} -> {completed_archive_names}')
-        _return['rename'] = {k for k, v in completed_archive_names.items() if v}
+        _return['rename_archive'] = {k for k, v in completed_archive_names.items() if v}
+    romset = data['romsets'].get(archive_name)
     if not romset:
         return _return
+    # Filenames
+    def _rename_files_reducer(acc, rom):
+        _expected_filename = romset['files'][rom.sha1]
+        if _expected_filename != rom.file_name:
+            acc[rom.sha1] = {'current': rom.file_name, 'expected': _expected_filename}
+        return acc
+    _return['rename_files'] = reduce(_rename_files_reducer, roms, {})
     # Missing
     def _clone_reducer(acc, missing_sha1):
         missing_filepath = romset['files'][missing_sha1]
