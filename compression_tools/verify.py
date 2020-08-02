@@ -33,6 +33,9 @@ def verify_results(archive_name, roms, data):
     if completed_archive_names and archive_name not in completed_archive_names:
         log.debug(f'incorrect_archivename: {archive_name} -> {completed_archive_names}')
         _return['rename_archive'] = {k for k, v in completed_archive_names.items() if v}
+        if len(completed_archive_names) == 1:
+            archive_name = next(completed_archive_names.__iter__())
+    # TODO: if the archive needs to be renamed then verification terminates. Could we proceed with the assumption of the correct archive name?
     romset = data['romsets'].get(archive_name)
     if not romset:
         return _return
@@ -71,11 +74,6 @@ def verify_results(archive_name, roms, data):
 
     _return = {k: v for k, v in _return.items() if v}
     return _return
-    # TODO:
-    # incorrect archive_name? core+archive_name?
-    # file from another romset
-    # ok core - ok clones
-
 
 
 def verify_archive(f):
