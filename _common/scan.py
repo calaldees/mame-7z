@@ -85,6 +85,27 @@ class FileScan(NamedTuple):
         return self.scan_dir_entry.stat()
 
 def fast_scan(root, path=None, search_filter=fast_scan_regex_filter()):
+    """
+    >>> import tempfile
+    >>> import pathlib
+    >>> tempdir = tempfile.TemporaryDirectory()
+    >>> for p in (map(partial(pathlib.Path, tempdir.name), (
+    ...     'test/folder/1/file1.txt',
+    ...     'test/folder/1/file2.txt',
+    ...     'test/folder/3/file1.txt',
+    ...     'test/folder/file4.json',
+    ...     'file5.csv',
+    ... ))):
+    ...     p.parent.mkdir(parents=True, exist_ok=True)
+    ...     p.touch()
+    >>> files = tuple(fast_scan(tempdir.name))
+    >>> sorted(f.relative for f in files)
+    ['file5.csv', 'test/folder/1/file1.txt', 'test/folder/1/file2.txt', 'test/folder/3/file1.txt', 'test/folder/file4.json']
+    >>> files[0].stats.st_size
+    0
+    >>> tempdir.cleanup()
+
+    """
     path = path or ''
     _path = os.path.join(root, path)
     if not os.path.isdir(_path):

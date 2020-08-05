@@ -31,13 +31,13 @@ def verify_results(archive_name, roms, data):
         for _archive_name, _data in data['romsets'].items()
     }
     if completed_archive_names and archive_name not in completed_archive_names:
-        log.debug(f'incorrect_archivename: {archive_name} -> {completed_archive_names}')
         _return['rename_archive'] = {k for k, v in completed_archive_names.items() if v}
         if len(completed_archive_names) == 1:
             archive_name = next(completed_archive_names.__iter__())
     # TODO: if the archive needs to be renamed then verification terminates. Could we proceed with the assumption of the correct archive name?
     romset = data['romsets'].get(archive_name)
     if not romset:
+        log.warning(f'No romset data for {archive_name=}')
         return _return
     # Filenames
     def _rename_files_reducer(acc, rom):

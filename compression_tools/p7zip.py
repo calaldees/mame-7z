@@ -47,6 +47,12 @@ class P7Zip():
     REGEX_HASH_SHA1 = re.compile(b'[A-Fa-f0-9]{40}')
 
     def hash(self, cwd, source):
+        """
+        TODO:
+        Not really effiecent as files need to be on disk - creates lots of disk IO
+        Could this be replaced with a streaming version?
+        We would need a way for 7z to output to file contents to stdout and pipe into python hash function
+        """
         assert os.path.isfile(os.path.abspath(os.path.join(cwd, source)))
         output = subprocess.run(
             ("7z", "h", "-scrcSHA1", source),

@@ -39,8 +39,13 @@ class RomData():
 # Request Handler --------------------------------------------------------------
 
 class IndexResource():
+    def __init__(self, rom_data):
+        self.rom_data = rom_data
     def on_get(self, request, response):
-        response.media = {}
+        response.media = {
+            'roms': len(self.rom_data.sha1.keys()),
+            'archives': len(self.rom_data.archive.keys()),
+        }
         response.status = falcon.HTTP_200
 
 class SHA1InfoResource():

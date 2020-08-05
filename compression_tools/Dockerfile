@@ -10,7 +10,7 @@ COPY *.py ./
 
 FROM base as test
     RUN pip install pytest
-    COPY ./test ./test
+    #COPY ./test ./test
     RUN pytest --doctest-modules
 
 FROM base as compress
