@@ -4,17 +4,17 @@ import logging
 
 import falcon
 
-
-from scan import fast_scan
-
+from _common.scan import fast_scan
+from _common.roms import RomData
 
 log = logging.getLogger(__name__)
 
 FILE_RESCAN_SECONDS = 60
 
 
-class CatalogData():
+class CatalogData(RomData):
     def __init__(self, filehandle):
+        super().__init__(filehandle, readonly=False)
         self.mtime = {}
 
 
@@ -25,8 +25,16 @@ class IndexResource():
         response.media = {}
         response.status = falcon.HTTP_200
 
+class TrackFileResource():
+    def __init__():
+        pass
+    def on_get(self, request, response):
+        pass
+    def on_post(self, request, response):
+        pass
 
-class NextFileResource():
+
+class NextUntrackedFileResource():
     def __init__(self, path, catalog_data):
         self.path = path
         self.catalog_data = catalog_data
@@ -53,7 +61,7 @@ class NextFileResource():
             (
                 self._last_scan == None
                 or
-                self._last_scan < datetime.datetime.now() - datetime.timedelta(seconds=FILE_RESCAN_SECONDS)
+                self._last_scan < (datetime.datetime.now() - datetime.timedelta(seconds=FILE_RESCAN_SECONDS))
             )
         ):
             self._rescan_files()
@@ -70,14 +78,12 @@ class NextFileResource():
 
 # Setup App -------------------------------------------------------------------
 
-def create_wsgi_app(path, catalog_data_filename, **kwargs):
-    assert os.path.isfile(catalog_data_filename)
-    with open(catalog_data_filename, 'rt') as filehandle:
-        catalog_data = CatalogData(filehandle)
+def create_wsgi_app(rom_path, catalog_data_filename, **kwargs):
+    catalog_data = CatalogData(catalog_data_filename)
 
     app = falcon.API()
     app.add_route(r'/', IndexResource())
-    app.add_route(r'/next_file', NextFileResource(path, catalog_data))
+    app.add_route(r'/next_file', NextUntrackedFileResource(rom_path, catalog_data))
 
     return app
 
@@ -93,7 +99,7 @@ def get_args():
         ''',
     )
 
-    parser.add_argument('path', action='store', default='/Users/allancallaghan/Applications/mame/roms/', help='')
+    parser.add_argument('rom_path', action='store', default='/Users/allancallaghan/Applications/mame/roms/', help='')
     parser.add_argument('catalog_data_filename', action='store', default='./catalog.txt', help='')
 
     parser.add_argument('--host', action='store', default='0.0.0.0', help='')

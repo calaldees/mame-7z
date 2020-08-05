@@ -5,35 +5,13 @@ import logging
 from itertools import chain
 from functools import reduce
 from collections import defaultdict
-from types import MappingProxyType # https://stackoverflow.com/questions/41795116/difference-between-mappingproxytype-and-pep-416-frozendict
 
 import falcon
 
-from parse_xml import Rom
-
+from _common.roms import RomData
 
 log = logging.getLogger(__name__)
 
-
-# ------------------------------------------------------------------------------
-
-class RomData():
-    """
-    Romdata for 364682 in python3 memory takes 185Mb RAM
-    """
-    def __init__(self, filehandle):
-        sha1 = {}
-        archive = {}
-        log.info('Loading rom data ...')
-        for count, rom in enumerate(filter(None, map(Rom.parse, filehandle))):
-            sha1.setdefault(rom.sha1, set()).add(rom)
-            archive.setdefault(rom.archive_name, set()).add(rom)
-            if count % 10000 == 0:
-                print('.', end='', flush=True)
-        print()
-        self.sha1 = MappingProxyType(sha1)
-        self.archive = MappingProxyType(archive)
-        log.info(f'Loaded dataset for {count} roms')
 
 
 # Request Handler --------------------------------------------------------------
@@ -115,9 +93,7 @@ class SetsResource():
 # Setup App -------------------------------------------------------------------
 
 def create_wsgi_app(rom_data_filename, **kwargs):
-    assert os.path.isfile(rom_data_filename)
-    with open(rom_data_filename, 'rt') as filehandle:
-        rom_data = RomData(filehandle)
+    rom_data = RomData(rom_data_filename)
 
     app = falcon.API()
     app.add_route(r'/', IndexResource())

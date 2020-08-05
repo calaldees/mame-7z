@@ -6,8 +6,9 @@ from collections import defaultdict
 
 import requests
 
-from scan import fast_scan
-from p7zip import P7Zip
+from _common.roms import Rom
+from _common.scan import fast_scan
+from _common.p7zip import P7Zip
 
 
 import logging
@@ -16,11 +17,6 @@ logging.basicConfig(level=logging.INFO)
 
 p7zip = P7Zip()
 
-
-class Rom(NamedTuple):
-    sha1: str
-    archive_name: str
-    file_name: str
 
 
 def verify_results(archive_name, roms, data):

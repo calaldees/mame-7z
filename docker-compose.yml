@@ -1,6 +1,9 @@
 version: "3.8"
 
 services:
+    catalog:
+        build:
+            context: ./catalog
     rom_data:
         build:
             context: ./rom_data

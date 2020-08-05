@@ -1,10 +1,20 @@
 import os.path
 import xml.etree.ElementTree as ET
-from typing import NamedTuple
 from itertools import chain
 import subprocess
 from zipfile import ZipFile
-import re
+
+from _common.roms import Rom
+
+
+def rom_from_xml_element(item, rom, parent='', folder=''):
+    folder_name = item.get('name') if parent else ''
+    return Rom(
+        sha1=rom.get('sha1'),
+        archive_name=os.path.join(folder, parent or item.get('name')),
+        file_name=os.path.join(folder_name, rom.get('name'))
+    )
+
 
 
 def _tag_iterator(iterparse, tag):
@@ -18,34 +28,6 @@ def _find_recursively(element, func_select):
             yield child
         else:
             yield from _find_recursively(child, func_select)
-
-
-class Rom(NamedTuple):
-    sha1: str
-    archive_name: str
-    file_name: str
-
-    @staticmethod
-    def from_xml_rom(item, rom, parent='', folder=''):
-        folder_name = item.get('name') if parent else ''
-        return Rom(
-            sha1=rom.get('sha1'),
-            archive_name=os.path.join(folder, parent or item.get('name')),
-            file_name=os.path.join(folder_name, rom.get('name'))
-        )
-
-    @staticmethod
-    def parse(line):
-        match = re.match(
-            r"""(?P<sha1>[0-9A-Fa-f]{40}) (?P<archive_name>.+):(?P<file_name>.+)""",
-            line,
-        )
-        if match:
-            return Rom(**match.groupdict())
-
-    def __str__(self) -> str:
-        return f"{self.sha1} {self.archive_name}:{self.file_name}"
-
 
 
 PATH_MAME = '/Users/allancallaghan/Applications/mame/'
@@ -69,7 +51,7 @@ def _files_for_machine(machine, parents_to_exclude={}):
     for rom in machine.findall('rom'):
         if rom.get('merge') or rom.get('status') == "nodump":
             continue
-        yield Rom.from_xml_rom(
+        yield rom_from_xml_element(
             item=machine,
             rom=rom,
             parent=machine.get('romof') if machine.get('romof') not in parents_to_exclude else ''
@@ -147,7 +129,7 @@ def iter_software(get_xml_filehandle):
                 if not rom.get('name'):
                     # log.warning(f"software {e.get('name')} has a rom with no name?")
                     continue
-                yield Rom.from_xml_rom(
+                yield rom_from_xml_element(
                     item=e,
                     rom=rom,
                     parent=e.get('cloneof') or '',
