@@ -24,7 +24,7 @@ def hash_archive(rom_path, archive):
         os.makedirs(destination_folder)
         p7zip.extract(
             cwd=tempdir,
-            source_file=rom_path.joinpath(archive).resolve,
+            source_file=rom_path.joinpath(archive).resolve(),
             destination_folder=destination_folder,
         )
         # Hash check archive content as Rom list
@@ -40,9 +40,9 @@ def hash_archive(rom_path, archive):
 
 def worker_catalog(rom_path, url_api_catalog, sleep, **kwags):
     while True:
-        _file = requests.get(f'{url_api_catalog}/next_file').json['file']
+        _file = requests.get(f'{url_api_catalog}/next_file').json()['file']
         if not _file:
-            time.sleep(sleep)
+            time.sleep(sleep.total_seconds())
             continue
         roms = hash_archive(rom_path, pathlib.Path(_file))
         requests.post(f'{url_api_catalog}/archive/{_file}', json=roms)
@@ -70,7 +70,20 @@ def get_args():
     return kwargs
 
 
+def postmortem(func, *args, **kwargs):
+    import traceback
+    import pdb
+    import sys
+    try:
+        return func(*args, **kwargs)
+    except Exception:
+        type, value, tb = sys.exc_info()
+        traceback.print_exc()
+        pdb.post_mortem(tb)
+
+
+
 if __name__ == '__main__':
     kwargs = get_args()
     logging.basicConfig(level=kwargs['log_level'])
-    worker_catalog(**kwargs)
+    postmortem(worker_catalog, **kwargs)

@@ -17,7 +17,7 @@ services:
             target: worker_catalog
         volumes:
             - ${PATH_HOST_ROMS}:/roms/:ro
-        command: ["/roms/", "http://api_catalog:9002/next_file"]
+        command: ["/roms/", "http://api_catalog:9002"]
 
 volumes:
     catalog:

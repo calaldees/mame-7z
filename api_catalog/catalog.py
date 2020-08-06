@@ -28,11 +28,13 @@ class IndexResource():
 class ArchiveResource():
     def __init__(self, catalog_data):
         self.catalog_data = catalog_data
-    def on_get(self, request, response):
+    def _sink(self, request, response):
+        archive_name = request.path.strip('/archive/')  # HACK! The prefix route needs to be removed .. damnit ...
+        return getattr(self, f'on_{request.method.lower()}')(request, response, archive_name)
+    def on_get(self, request, response, archive_name):
         """
         TODO: I don't like the return - multiple archives?
         """
-        archive_name = request.path.strip('/archive/')  # HACK! The prefix route needs to be removed .. damnit ...
         catalog_roms = self.catalog_data.archive.get(archive_name)
         if not catalog_roms:
             response.media = {}
@@ -44,8 +46,8 @@ class ArchiveResource():
                 for rom in catalog_roms
             #}
         }
-    def on_post(self, request, response):
-        pass
+    def on_post(self, request, response, archive_name):
+        log.info(f'yay {archive_name}')
 
 
 class NextUntrackedFileResource():
@@ -98,7 +100,7 @@ def create_wsgi_app(rom_path, catalog_data_filename, **kwargs):
     app = falcon.API()
     app.add_route(r'/', IndexResource())
     app.add_route(r'/next_file', NextUntrackedFileResource(rom_path, catalog_data))
-    app.add_sink(ArchiveResource(rom_data).on_get, prefix=r'/archive/')
+    app.add_sink(ArchiveResource(catalog_data)._sink, prefix=r'/archive/')
 
     return app
 
