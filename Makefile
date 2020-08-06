@@ -6,7 +6,7 @@ build:
 	# build
 
 test:
-	pytest --doctest-modules
+	pytest --doctest-modules -p no:cacheprovider
 
 run:
 	# run

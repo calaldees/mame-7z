@@ -155,6 +155,7 @@ def iter_software_zip(filename):
 #/Users/allancallaghan/Applications/mame/hash.zip
 
 def main():
+    raise NotImplementedError('need to take args for files from commandline?')
     for rom in chain(
         iter_mame(lambda: _zip_filehandle('mamelx.zip')),
         iter_software_zip('hash.zip'),

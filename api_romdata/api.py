@@ -96,7 +96,7 @@ def create_wsgi_app(rom_data_filename, **kwargs):
     rom_data = RomData(rom_data_filename)
 
     app = falcon.API()
-    app.add_route(r'/', IndexResource())
+    app.add_route(r'/', IndexResource(rom_data))
     app.add_route(r'/sha1/{sha1}', SHA1InfoResource(rom_data))
     app.add_sink(ArchiveResource(rom_data).on_get, prefix=r'/archive/')
     app.add_route(r'/sets', SetsResource(rom_data))

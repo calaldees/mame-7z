@@ -25,11 +25,25 @@ class IndexResource():
         response.media = {}
         response.status = falcon.HTTP_200
 
-class TrackFileResource():
-    def __init__():
-        pass
+class ArchiveResource():
+    def __init__(self, catalog_data):
+        self.catalog_data = catalog_data
     def on_get(self, request, response):
-        pass
+        """
+        TODO: I don't like the return - multiple archives?
+        """
+        archive_name = request.path.strip('/archive/')  # HACK! The prefix route needs to be removed .. damnit ...
+        catalog_roms = self.catalog_data.archive.get(archive_name)
+        if not catalog_roms:
+            response.media = {}
+            response.status = falcon.HTTP_404
+            return
+        response.media = {
+            #archive_name: {
+                rom.sha1: rom.file_name
+                for rom in catalog_roms
+            #}
+        }
     def on_post(self, request, response):
         pass
 
@@ -84,6 +98,7 @@ def create_wsgi_app(rom_path, catalog_data_filename, **kwargs):
     app = falcon.API()
     app.add_route(r'/', IndexResource())
     app.add_route(r'/next_file', NextUntrackedFileResource(rom_path, catalog_data))
+    app.add_sink(ArchiveResource(rom_data).on_get, prefix=r'/archive/')
 
     return app
 
@@ -99,7 +114,7 @@ def get_args():
         ''',
     )
 
-    parser.add_argument('rom_path', action='store', default='/Users/allancallaghan/Applications/mame/roms/', help='')
+    parser.add_argument('rom_path', action='store', help='')
     parser.add_argument('catalog_data_filename', action='store', default='./catalog.txt', help='')
 
     parser.add_argument('--host', action='store', default='0.0.0.0', help='')

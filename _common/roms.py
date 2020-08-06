@@ -37,18 +37,18 @@ class RomData():
         if isinstance(filehandle, str):
             assert os.path.isfile(filehandle)
             filehandle = open(filehandle, 'rt')
-        sha1 = {}
-        archive = {}
+        self.sha1 = {}
+        self.archive = {}
         log.info('Loading rom data ...')
         count = 0
         for count, rom in enumerate(filter(None, map(Rom.parse, filehandle))):
-            sha1.setdefault(rom.sha1, set()).add(rom)
-            archive.setdefault(rom.archive_name, set()).add(rom)
+            self.sha1.setdefault(rom.sha1, set()).add(rom)
+            self.archive.setdefault(rom.archive_name, set()).add(rom)
             if count % 10000 == 0:
                 print('.', end='', flush=True)
         print()
         log.info(f'Loaded dataset for {count} roms')
         if readonly:
-            self.sha1 = MappingProxyType(sha1)
-            self.archive = MappingProxyType(archive)
+            self.sha1 = MappingProxyType(self.sha1)
+            self.archive = MappingProxyType(self.archive)
         filehandle.close()
