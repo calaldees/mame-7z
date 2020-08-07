@@ -1,11 +1,13 @@
 import os
 import datetime
 import logging
+from functools import reduce
+from pathlib import Path
 
 import falcon
 
 from _common.scan import fast_scan
-from _common.roms import RomData
+from _common.roms import RomData, Rom
 
 log = logging.getLogger(__name__)
 
@@ -13,9 +15,50 @@ FILE_RESCAN_SECONDS = 60
 
 
 class CatalogData(RomData):
-    def __init__(self, filehandle):
-        super().__init__(filehandle, readonly=False)
+    def __init__(self, catalog_data_filename):
+        super().__init__(catalog_data_filename, readonly=False)
+        self.catalog_data_filename = catalog_data_filename
+        self.catalog_mtime_filename = './mtime.txt' # TODO: #catalog_mtime_filename
+        self._open_mtime()
+    def _open_mtime(self):
         self.mtime = {}
+        if not os.path.isfile(self.catalog_mtime_filename):
+            return
+        with open(self.catalog_mtime_filename, 'r') as filehandle:
+            for line in filehandle:
+                archive_name, mtime = (i.strip() for i in line.split(':'))
+                self.mtime[archive_name] = mtime
+    def save(self):
+        """
+        Save state of in memory object back to disk
+        """
+        log.info('Saving catalog_data in memory to disk')
+        with open(self.catalog_data_filename, 'w') as filehandle:
+            for count, rom in enumerate(
+                rom
+                for archive_roms in self.archive.values()
+                for rom in archive_roms
+            ):
+                filehandle.write(f'{rom}\n')
+                if count % 10000 == 0:
+                    print('.', end='', flush=True)
+        with open(self.catalog_mtime_filename, 'w') as filehandle:
+            for archive_name, mtime in self.mtime.items():
+                    filehandle.write(f'{archive_name}:{mtime}\n')
+    def replace_roms(self, roms):
+        """
+        TODO: doctest
+        """
+        def _group_roms_by_archive_name(acc, rom):
+            acc.setdefault(rom.archive_name, set()).add(rom)
+            return acc
+        for archive_name, roms in reduce(_group_roms_by_archive_name, roms, {}).items():
+            _old_roms = self.archive.get(archive_name, ())
+            self.archive[archive_name] = roms
+            for _old_rom in _old_roms:
+                _roms_with_sha1 = self.sha1.get(_old_rom.sha1)
+                _roms_with_sha1.discard({r for r in _roms_with_sha1 if r.archive_name == archive_name})
+
 
 
 # Resources --------------------------------------------------------------------
@@ -25,11 +68,15 @@ class IndexResource():
         response.media = {}
         response.status = falcon.HTTP_200
 
+
 class ArchiveResource():
     def __init__(self, catalog_data):
         self.catalog_data = catalog_data
     def _sink(self, request, response):
-        archive_name = request.path.strip('/archive/')  # HACK! The prefix route needs to be removed .. damnit ...
+        """
+        """
+        archive_file = request.path.strip('/archive/')  # HACK! The prefix route needs to be removed .. damnit ...
+        archive_name = Path(archive_file).stem
         return getattr(self, f'on_{request.method.lower()}')(request, response, archive_name)
     def on_get(self, request, response, archive_name):
         """
@@ -47,7 +94,9 @@ class ArchiveResource():
             #}
         }
     def on_post(self, request, response, archive_name):
-        log.info(f'yay {archive_name}')
+        self.catalog_data.replace_roms(Rom(**rom_dict) for rom_dict in request.media['roms'])
+        self.catalog_data.mtime[archive_name] = request.media['mtime']
+        response.status = falcon.HTTP_200
 
 
 class NextUntrackedFileResource():
@@ -58,17 +107,15 @@ class NextUntrackedFileResource():
         self._last_scan = None
     def _rescan_files(self):
         self._last_scan = datetime.datetime.now()
-        self._files = [
-            f
-            for f in fast_scan(self.path)
-            if (
-                f.exists and
-                f.stats.st_mtime != self.catalog_data.mtime.get(
-                    os.path.join(f.folder, f.file_no_ext),
-                    0,
+        def _filter_files(f):
+            return (
+                f.exists
+                and
+                str(f.stats.st_mtime) != self.catalog_data.mtime.get(
+                    os.path.join(f.folder, f.file_no_ext)
                 )
             )
-        ]
+        self._files = list(filter(_filter_files, fast_scan(self.path)))
     @property
     def files(self):
         if (
@@ -96,6 +143,7 @@ class NextUntrackedFileResource():
 
 def create_wsgi_app(rom_path, catalog_data_filename, **kwargs):
     catalog_data = CatalogData(catalog_data_filename)
+    init_sigterm_handler(catalog_data.save)
 
     app = falcon.API()
     app.add_route(r'/', IndexResource())
@@ -128,7 +176,7 @@ def get_args():
     return kwargs
 
 
-def init_sigterm_handler():
+def init_sigterm_handler(func_shutdown=None):
     """
     Docker Terminate
     https://itnext.io/containers-terminating-with-grace-d19e0ce34290
@@ -136,16 +184,18 @@ def init_sigterm_handler():
     """
     import signal
     def handle_sigterm(*args):
+        if callable(func_shutdown):
+            func_shutdown()
         raise KeyboardInterrupt()
+    signal.signal(signal.SIGINT, handle_sigterm)
     signal.signal(signal.SIGTERM, handle_sigterm)
+    #signal.signal(signal.SIGKILL, handle_sigterm)
 
 
 # Main ------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    init_sigterm_handler()
     kwargs = get_args()
-
     logging.basicConfig(level=kwargs['log_level'])
 
     from wsgiref import simple_server

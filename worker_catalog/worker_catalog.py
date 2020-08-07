@@ -44,8 +44,12 @@ def worker_catalog(rom_path, url_api_catalog, sleep, **kwags):
         if not _file:
             time.sleep(sleep.total_seconds())
             continue
-        roms = hash_archive(rom_path, pathlib.Path(_file))
-        requests.post(f'{url_api_catalog}/archive/{_file}', json=roms)
+        archive = pathlib.Path(_file)
+        requests.post(f'{url_api_catalog}/archive/{_file}', json={
+            #'archive_file': _file,
+            'mtime': str(rom_path.joinpath(archive).stat().st_mtime),
+            'roms': hash_archive(rom_path, archive),
+        })
 
 
 def get_args():

@@ -33,12 +33,13 @@ class RomData():
     """
     Romdata for 364682 in python3 memory takes 185Mb RAM
     """
-    def __init__(self, filehandle, readonly=True):
-        if isinstance(filehandle, str):
-            assert os.path.isfile(filehandle)
-            filehandle = open(filehandle, 'rt')
+    def __init__(self, rom_data_filename, readonly=True):
         self.sha1 = {}
         self.archive = {}
+        if not os.path.isfile(rom_data_filename):
+            log.warning(f'No Rom data loaded - {rom_data_filename} does not exist')
+            return
+        filehandle = open(rom_data_filename, 'rt')
         log.info('Loading rom data ...')
         count = 0
         for count, rom in enumerate(filter(None, map(Rom.parse, filehandle))):
