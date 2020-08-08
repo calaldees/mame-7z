@@ -1,6 +1,7 @@
 import os
 import datetime
 import logging
+import re
 from functools import reduce
 from pathlib import Path
 
@@ -75,8 +76,8 @@ class ArchiveResource():
     def _sink(self, request, response):
         """
         """
-        archive_file = request.path.strip('/archive/')  # HACK! The prefix route needs to be removed .. damnit ...
-        archive_name = Path(archive_file).stem
+        archive = Path(re.sub(r'^/archive/', '', request.path))  # # HACK! The prefix route needs to be removed .. damnit ...
+        archive_name = os.path.join(archive.parent.name, archive.stem)  # TODO: duplicated in catalog worker - maybe move to `Roms`?
         return getattr(self, f'on_{request.method.lower()}')(request, response, archive_name)
     def on_get(self, request, response, archive_name):
         """

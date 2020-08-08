@@ -5,6 +5,7 @@ import logging
 from itertools import chain
 from functools import reduce
 from collections import defaultdict
+from pathlib import Path
 
 import falcon
 
@@ -44,7 +45,7 @@ class ArchiveResource():
         """
         TODO: I don't like the return - multiple archives?
         """
-        archive_name = request.path.strip('/archive/')  # HACK! The prefix route needs to be removed .. damnit ...
+        archive_name = archive = Path(re.sub(r'^/archive/', '', request.path))  # HACK! The prefix route needs to be removed .. damnit ...
         archive_roms = self.rom_data.archive.get(archive_name)
         if not archive_roms:
             response.status = falcon.HTTP_404
