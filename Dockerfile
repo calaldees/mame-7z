@@ -7,17 +7,20 @@ WORKDIR ${WORKDIR}
 
 
 FROM base as requirements
-    RUN apk add p7zip
+    RUN apk add \
+        p7zip \
+        mame-tools \
+    && true
     COPY requirements.txt ./
     RUN pip3 install -r requirements.txt
 
-FROM requirements as requirements_test
-    RUN pip3 install pytest
-
-FROM requirements_test as test
-    # TODO:
+FROM requirements as code
     COPY *.py ./
-    RUN pytest --doctest-modules
+
+#FROM requirements as requirements_test
+#    RUN pip3 install pytest
+#FROM requirements_test as test
+#    RUN pytest --doctest-modules
 
 
 # API - Rom Data ---------------------------------------------------------------
@@ -49,13 +52,20 @@ FROM api_romdata_xml as api_romdata_data
     RUN set -o pipefail && \
         python3 ./api_domdata/parse_mame_xml.py > roms.txt
 
-FROM requirements as api_romdata
+
+
+
+
+# API Services -----------------------------------------------------------------
+
+
+FROM code as api_romdata
     COPY --from=api_romdata_data ${WORKDIR}/roms.txt ${WORKDIR}/
-    COPY \
-        _common/roms.py \
-        api_romdata/__init__.py \
-        api_romdata/api.py \
-    ./
+    #COPY \
+    #    _common/roms.py \
+    #    api_romdata/__init__.py \
+    #    api_romdata/api.py \
+    #./
     EXPOSE 9001
     CMD ["python3", "api_romdata/api.py", "roms.txt", "--port=9001"]
     #HEALTHCHECK
@@ -63,25 +73,25 @@ FROM requirements as api_romdata
 
 # API - Catalog ----------------------------------------------------------------
 
-FROM requirements as api_catalog
-    COPY \
-        _common/__init__.py \
-        _common/roms.py \
-        _common/scan.py \
-    ./_common/
-    COPY \
-        api_catalog/api.py \
-    ./api_catalog/
+FROM code as api_catalog
+    #COPY \
+    #    _common/__init__.py \
+    #    _common/roms.py \
+    #    _common/scan.py \
+    #./_common/
+    #COPY \
+    #    api_catalog/api.py \
+    #./api_catalog/
     EXPOSE 9002
     CMD ["python3", "api_catalog/api.py", "/roms/", "/catalog/catalog.txt", "--port=9002"]
     #HEALTHCHECK
 
 
 # Worker - Catalog -------------------------------------------------------------
-FROM requirements as worker_catalog
-    COPY \
-        _common/p7zip.py \
-        _common/scan.py \
-        worker_catalog/worker_catalog.py \
-    ./worker_catalog/
+FROM code as worker_catalog
+    #COPY \
+    #    _common/p7zip.py \
+    #    _common/scan.py \
+    #    worker_catalog/worker_catalog.py \
+    #./worker_catalog/
     ENTRYPOINT ["python3", "worker_catalog/worker_catalog.py"]
