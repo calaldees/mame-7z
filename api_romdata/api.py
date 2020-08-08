@@ -22,8 +22,9 @@ class IndexResource():
         self.rom_data = rom_data
     def on_get(self, request, response):
         response.media = {
-            'roms': len(self.rom_data.sha1.keys()),
-            'archives': len(self.rom_data.archive.keys()),
+            'version': os.environ.get('MAME_GIT_TAG'),
+            'sha1': len(self.rom_data.sha1.keys()),
+            'archive': len(self.rom_data.archive.keys()),
         }
         response.status = falcon.HTTP_200
 
@@ -41,11 +42,19 @@ class SHA1InfoResource():
 class ArchiveResource():
     def __init__(self, rom_data):
         self.rom_data = rom_data
-    def on_get(self, request, response):
+    def _sink(self, request, response):
+        archive = Path(re.sub(r'^/archive/', '', request.path))  # HACK! The prefix route needs to be removed .. damnit ...
+        archive_name = os.path.join(archive.parent.name, archive.stem)
+        if not archive_name:
+            return self.on_index(request, response)  # This is really bad - my implementation of sink is horrible
+        return getattr(self, f'on_{request.method.lower()}')(request, response, archive_name)
+    def on_index(self, request, response):
+        response.media = tuple(self.rom_data.archive.keys())
+        response.status = falcon.HTTP_200
+    def on_get(self, request, response, archive_name):
         """
         TODO: I don't like the return - multiple archives?
         """
-        archive_name = archive = Path(re.sub(r'^/archive/', '', request.path))  # HACK! The prefix route needs to be removed .. damnit ...
         archive_roms = self.rom_data.archive.get(archive_name)
         if not archive_roms:
             response.status = falcon.HTTP_404
@@ -99,7 +108,7 @@ def create_wsgi_app(rom_data_filename, **kwargs):
     app = falcon.API()
     app.add_route(r'/', IndexResource(rom_data))
     app.add_route(r'/sha1/{sha1}', SHA1InfoResource(rom_data))
-    app.add_sink(ArchiveResource(rom_data).on_get, prefix=r'/archive/')
+    app.add_sink(ArchiveResource(rom_data)._sink, prefix=r'/archive/')
     app.add_route(r'/sets', SetsResource(rom_data))
     return app
 

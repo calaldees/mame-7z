@@ -65,8 +65,13 @@ class CatalogData(RomData):
 # Resources --------------------------------------------------------------------
 
 class IndexResource():
+    def __init__(self, catalog_data):
+        self.catalog_data = catalog_data
     def on_get(self, request, response):
-        response.media = {}
+        response.media = {
+            'sha1': len(self.catalog_data.sha1.keys()),
+            'archive': len(self.catalog_data.archive.keys()),
+        }
         response.status = falcon.HTTP_200
 
 
@@ -78,7 +83,12 @@ class ArchiveResource():
         """
         archive = Path(re.sub(r'^/archive/', '', request.path))  # # HACK! The prefix route needs to be removed .. damnit ...
         archive_name = os.path.join(archive.parent.name, archive.stem)  # TODO: duplicated in catalog worker - maybe move to `Roms`?
+        if not archive_name:
+            return self.on_index(request, response)  # This is really bad - my implementation of sink is horrible
         return getattr(self, f'on_{request.method.lower()}')(request, response, archive_name)
+    def on_index(self, request, response):
+        response.media = tuple(self.catalog_data.archive.keys())
+        response.status = falcon.HTTP_200
     def on_get(self, request, response, archive_name):
         """
         TODO: I don't like the return - multiple archives?
@@ -147,7 +157,7 @@ def create_wsgi_app(rom_path, catalog_data_filename, **kwargs):
     init_sigterm_handler(catalog_data.save)
 
     app = falcon.API()
-    app.add_route(r'/', IndexResource())
+    app.add_route(r'/', IndexResource(catalog_data))
     app.add_route(r'/next_file', NextUntrackedFileResource(rom_path, catalog_data))
     app.add_sink(ArchiveResource(catalog_data)._sink, prefix=r'/archive/')
 
