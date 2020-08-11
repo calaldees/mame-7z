@@ -16,10 +16,10 @@ FILE_RESCAN_SECONDS = 60
 
 
 class CatalogData(RomData):
-    def __init__(self, catalog_data_filename):
+    def __init__(self, catalog_data_filename, catalog_mtime_filename):
         super().__init__(catalog_data_filename, readonly=False)
         self.catalog_data_filename = catalog_data_filename
-        self.catalog_mtime_filename = './mtime.txt' # TODO: #catalog_mtime_filename
+        self.catalog_mtime_filename = catalog_mtime_filename
         self._open_mtime()
     def _open_mtime(self):
         self.mtime = {}
@@ -152,8 +152,8 @@ class NextUntrackedFileResource():
 
 # Setup App -------------------------------------------------------------------
 
-def create_wsgi_app(rom_path, catalog_data_filename, **kwargs):
-    catalog_data = CatalogData(catalog_data_filename)
+def create_wsgi_app(rom_path, catalog_data_filename, catalog_mtime_filename, **kwargs):
+    catalog_data = CatalogData(catalog_data_filename, catalog_mtime_filename)
     init_sigterm_handler(catalog_data.save)
 
     app = falcon.API()
@@ -175,8 +175,9 @@ def get_args():
         ''',
     )
 
-    parser.add_argument('rom_path', action='store', help='')
-    parser.add_argument('catalog_data_filename', action='store', default='./catalog.txt', help='')
+    parser.add_argument('--rom_path', action='store', required=True, help='')
+    parser.add_argument('--catalog_data_filename', action='store', required=True, default='./catalog.txt', help='')
+    parser.add_argument('--catalog_mtime_filename', action='store', required=True, default='./mtimes.txt', help='')
 
     parser.add_argument('--host', action='store', default='0.0.0.0', help='')
     parser.add_argument('--port', action='store', default=9002, type=int, help='')

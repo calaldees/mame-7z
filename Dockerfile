@@ -4,6 +4,7 @@ ARG WORKDIR=/romcheck
 ENV WORKDIR=${WORKDIR}
 RUN mkdir -p ${WORKDIR}
 WORKDIR ${WORKDIR}
+ENV PYTHONPATH=.
 
 
 FROM base as requirements
@@ -22,12 +23,12 @@ FROM requirements as requirements_test
     RUN pip3 install pytest
 FROM requirements_test as test
     COPY --from=code ${WORKDIR} ./
-    RUN PYTHONPATH=. pytest --doctest-modules -p no:cacheprovider
+    RUN pytest --doctest-modules -p no:cacheprovider
 
 
 FROM code as api_catalog
     EXPOSE 9002
-    CMD ["python3", "api_catalog/api.py", "/roms/", "/catalog/catalog.txt", "--port=9002"]
+    ENTRYPOINT ["python3", "api_catalog/catalog.py", "--port=9002"]
     #HEALTHCHECK
 
 FROM code as worker_catalog
@@ -35,7 +36,7 @@ FROM code as worker_catalog
 
 FROM code as api_verify
     EXPOSE 9003
-    CMD ["python3", "api_verify/verify.py", "--port=9003"]
+    ENTRYPOINT [ "executable" ] ["python3", "api_verify/verify.py", "--port=9003"]
 
 
 
@@ -59,7 +60,8 @@ FROM base as api_romdata_xml
     true
 
 FROM api_romdata_xml as api_romdata_data
-    COPY --from=code ${WORKDIR} ./
+    COPY --from=code ${WORKDIR}/_common/roms.py ./_common/roms.py
+    COPY --from=code ${WORKDIR}/api_romdata/parse_mame_xml.py ./api_romdata/parse_mame_xml.py
     # replace `>` with `| tee` to see output
     #  `&& zip roms.zip roms.txt` no real need for this - most of it is hash's which don't compress 29MB -> 12MB
     RUN set -o pipefail && \
@@ -70,5 +72,5 @@ FROM api_romdata_xml as api_romdata_data
 FROM code as api_romdata
     COPY --from=api_romdata_data ${WORKDIR}/roms.txt ${WORKDIR}/
     EXPOSE 9001
-    CMD ["python3", "api_romdata/api.py", "roms.txt", "--port=9001"]
+    ENTRYPOINT ["python3", "api_romdata/api.py", "roms.txt", "--port=9001"]
     #HEALTHCHECK

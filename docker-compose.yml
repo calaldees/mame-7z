@@ -1,12 +1,16 @@
 version: "3.8"
 
 services:
+
     api_romdata:
         build:
             context: .
             target: api_romdata
             args:
                 MAME_GIT_TAG: ${MAME_GIT_TAG}
+        ports:
+            - 9001:9001
+
     api_catalog:
         build:
             context: .
@@ -16,7 +20,15 @@ services:
         volumes:
             - ${PATH_HOST_ROMS}:/roms/:ro
             - catalog:/catalog/:rw
-        command: ["http://api_romdata:9001"]
+        command: [
+            "--rom_path=/roms/",
+            "--catalog_data_filename=/catalog/catalog.txt",
+            "--catalog_mtime_filename=/catalog/mtimes.txt",
+        ]
+        ports:
+            - 9002:9002
+
+
     worker_catalog:
         build:
             context: .
@@ -25,11 +37,22 @@ services:
             - api_catalog
         volumes:
             - ${PATH_HOST_ROMS}:/roms/:ro
-        command: ["http://api_catalog:9002", "/roms/"]
+        command: [
+            "--rom_path=/roms/",
+            "--url_api_catalog=http://api_catalog:9002",
+        ]
+
     api_verify:
         build:
             context: .
             target: api_verify
-        command: ["http://api_romdata:9001", "http://api_catalog:9002"]
+        command: [
+            "--url_api_romdata=http://api_romdata:9001",
+            "--url_api_catalog=http://api_catalog:9002",
+        ]
+        ports:
+            - 9003:9003
+
+
 volumes:
     catalog:

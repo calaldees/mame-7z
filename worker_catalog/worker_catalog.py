@@ -61,8 +61,8 @@ def get_args():
         ''',
     )
 
-    parser.add_argument('rom_path', action='store', default='', help='')
-    parser.add_argument('url_api_catalog', action='store', default='', help='')
+    parser.add_argument('--rom_path', action='store', required=True, default='', help='')
+    parser.add_argument('--url_api_catalog', action='store', required=True, default='', help='')
 
     parser.add_argument('--sleep', action='store', type=int, default=60)
     parser.add_argument('--log_level', action='store', type=int, help='loglevel of output to stdout', default=logging.INFO)
