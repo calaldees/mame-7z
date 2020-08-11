@@ -79,6 +79,16 @@ def iter_mame(get_xml_filehandle):
     >>> mock_filehandle.return_value.read.side_effect = (data, b'', data, b'')
     >>> tuple(map(str, iter_mame(mock_filehandle)))
     ('91424d481ff99a8d3f4c45cea6d3f0eada049a6d naomi:epr-21576h.ic27', '2f32caf3906fc1408fd8126a500e74c682ff20fa 18wheelr:epr-22185a.ic22', '6db3bfa23246c250e334bbd54dcb5038a2d18dbc 18wheelr:18wheelro/epr-22185.ic22')
+
+
+
+    <rom name="mach3fg0.bin" size="8192" crc="0bae12a5" sha1="7bc0b82ccab0e4498a7a2a9dc85f03125f25826e" region="sprites" offset="6000"/>
+    <disk name="mach3" sha1="d0f72bded7feff5c360f8749d6c27650a6964847" region="laserdisc" index="0" writable="no"/>
+
+    <disk name="mach3" merge="mach3" sha1="d0f72bded7feff5c360f8749d6c27650a6964847" region="laserdisc" index="0" writable="no"/>
+
+    <disk name="maddog2" status="nodump" region="laserdisc" index="0" writable="no"/>
+    mamboagg/a40jab02.chd
     """
     assert callable(get_xml_filehandle)
     bioss = set()
@@ -155,7 +165,7 @@ def iter_software_zip(filename):
 #/Users/allancallaghan/Applications/mame/hash.zip
 
 def main():
-    raise NotImplementedError('need to take args for files from commandline?')
+    #raise NotImplementedError('need to take args for files from commandline?')
     for rom in chain(
         iter_mame(lambda: _zip_filehandle('mamelx.zip')),
         iter_software_zip('hash.zip'),

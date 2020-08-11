@@ -3,21 +3,33 @@ version: "3.8"
 services:
     api_romdata:
         build:
+            context: .
             target: api_romdata
             args:
                 MAME_GIT_TAG: ${MAME_GIT_TAG}
     api_catalog:
         build:
+            context: .
             target: api_catalog
+        depends_on:
+            - api_romdata
         volumes:
             - ${PATH_HOST_ROMS}:/roms/:ro
             - catalog:/catalog/:rw
+        command: ["http://api_romdata:9001"]
     worker_catalog:
         build:
+            context: .
             target: worker_catalog
+        depends_on:
+            - api_catalog
         volumes:
             - ${PATH_HOST_ROMS}:/roms/:ro
-        command: ["/roms/", "http://api_catalog:9002"]
-
+        command: ["http://api_catalog:9002", "/roms/"]
+    api_verify:
+        build:
+            context: .
+            target: api_verify
+        command: ["http://api_romdata:9001", "http://api_catalog:9002"]
 volumes:
     catalog:
