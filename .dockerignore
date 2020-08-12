@@ -1,9 +1,13 @@
 **/.*
 **/__pycache__/
+**/*.py[cod]
 **/*.md
 **/*.txt
 Dockerfile
 docker-compose.yml
 Makefile
 LICENSE
+nginx.conf
+index.html
+
 !requirements.txt

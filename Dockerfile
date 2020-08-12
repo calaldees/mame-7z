@@ -26,23 +26,21 @@ FROM requirements_test as test
     RUN pytest --doctest-modules -p no:cacheprovider
 
 
-FROM code as api_catalog
+FROM code as catalog
     EXPOSE 9002
-    ENTRYPOINT ["python3", "api_catalog/catalog.py", "--port=9002"]
+    ENTRYPOINT ["python3", "catalog/catalog.py", "--port=9002"]
     #HEALTHCHECK
-
-FROM code as worker_catalog
+FROM code as catalog_worker
     ENTRYPOINT ["python3", "worker_catalog/worker_catalog.py"]
 
-FROM code as api_verify
+FROM code as verify
     EXPOSE 9003
-    ENTRYPOINT [ "executable" ] ["python3", "api_verify/verify.py", "--port=9003"]
-
+    ENTRYPOINT ["python3", "verify/verify.py", "--port=9003"]
 
 
 # API - Rom Data ---------------------------------------------------------------
 
-FROM base as api_romdata_xml
+FROM base as romdata_xml
     RUN apk add \
         curl \
         subversion \
@@ -59,18 +57,18 @@ FROM base as api_romdata_xml
         rm -rf hash/ &&\
     true
 
-FROM api_romdata_xml as api_romdata_data
+FROM romdata_xml as romdata_data
     COPY --from=code ${WORKDIR}/_common/roms.py ./_common/roms.py
-    COPY --from=code ${WORKDIR}/api_romdata/parse_mame_xml.py ./api_romdata/parse_mame_xml.py
+    COPY --from=code ${WORKDIR}/romdata/parse_mame_xml.py ./romdata/parse_mame_xml.py
     # replace `>` with `| tee` to see output
     #  `&& zip roms.zip roms.txt` no real need for this - most of it is hash's which don't compress 29MB -> 12MB
     RUN set -o pipefail && \
-        python3 -m api_romdata.parse_mame_xml > roms.txt
+        python3 -m romdata.parse_mame_xml > roms.txt
 
 # Services ---------------------------------------------------------------------
 
-FROM code as api_romdata
-    COPY --from=api_romdata_data ${WORKDIR}/roms.txt ${WORKDIR}/
+FROM code as romdata
+    COPY --from=romdata_data ${WORKDIR}/roms.txt ${WORKDIR}/
     EXPOSE 9001
-    ENTRYPOINT ["python3", "api_romdata/api.py", "roms.txt", "--port=9001"]
+    ENTRYPOINT ["python3", "romdata/romdata.py", "roms.txt", "--port=9001"]
     #HEALTHCHECK

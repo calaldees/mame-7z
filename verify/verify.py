@@ -1,21 +1,12 @@
-import os
-import tempfile
-from typing import NamedTuple
-from functools import reduce
 from collections import defaultdict
+from functools import reduce
 
 import requests
-
-from _common.roms import Rom
-from _common.scan import fast_scan
-from _common.p7zip import P7Zip
-
+import falcon
 
 import logging
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
-p7zip = P7Zip()
 
 
 
@@ -72,6 +63,17 @@ def verify_results(archive_name, roms, data):
     return _return
 
 
+# Local experiment -------------------------------------------------------------
+
+import os
+import tempfile
+
+from _common.roms import Rom
+from _common.scan import fast_scan
+from _common.p7zip import P7Zip
+
+p7zip = P7Zip()
+
 def verify_archive(f):
     archive_name = os.path.join(f.folder, f.file_no_ext)
     log.debug(f'validating {archive_name} {f.relative}')
@@ -98,7 +100,6 @@ def verify_archive(f):
     return verify_results(archive_name, roms, data)
 
 
-
 def verify_folder(folder):
     for f in fast_scan(folder):
         if not f.exists:
@@ -106,6 +107,53 @@ def verify_folder(folder):
             continue
         is_valid = verify_archive(f)
         log.info(f'{f.relative}: {is_valid=}')
+
+
+# ------------------------------------------------------------------------------
+
+
+# Setup App -------------------------------------------------------------------
+
+def create_wsgi_app(url_api_romdata, url_api_catalog, **kwargs):
+    app = falcon.API()
+    #app.add_route(r'/', IndexResource(rom_data))
+    #app.add_sink(VerifyResource(rom_data)._sink, prefix=r'/verify/')
+    return app
+
+
+# Commandlin Args -------------------------------------------------------------
+
+def get_args():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog=__name__,
+        description='''
+        ''',
+    )
+
+    parser.add_argument('--url_api_romdata', action='store', required=True, help='')
+    parser.add_argument('--url_api_catalog', action='store', required=True, help='')
+
+    parser.add_argument('--host', action='store', default='0.0.0.0', help='')
+    parser.add_argument('--port', action='store', default=9003, type=int, help='')
+
+    parser.add_argument('--log_level', action='store', type=int, help='loglevel of output to stdout', default=logging.INFO)
+
+    kwargs = vars(parser.parse_args())
+    return kwargs
+
+
+def init_sigterm_handler():
+    """
+    Docker Terminate
+    https://itnext.io/containers-terminating-with-grace-d19e0ce34290
+    #old - https://lemanchet.fr/articles/gracefully-stop-python-docker-container.html
+    """
+    import signal
+    def handle_sigterm(*args):
+        raise KeyboardInterrupt()
+    signal.signal(signal.SIGTERM, handle_sigterm)
 
 
 def postmortem(func, *args, **kwargs):
@@ -121,4 +169,16 @@ def postmortem(func, *args, **kwargs):
 
 
 if __name__ == '__main__':
-    postmortem(verify_folder,'/Users/allancallaghan/Applications/mame/roms')
+    #postmortem(verify_folder,'/Users/allancallaghan/Applications/mame/roms')
+    init_sigterm_handler()
+    kwargs = get_args()
+
+    logging.basicConfig(level=kwargs['log_level'])
+
+    from wsgiref import simple_server
+    httpd = simple_server.make_server(kwargs['host'], kwargs['port'], create_wsgi_app(**kwargs))
+    try:
+        log.info('start')
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass

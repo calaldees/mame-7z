@@ -2,21 +2,31 @@ version: "3.8"
 
 services:
 
-    api_romdata:
+    nginx:
+        build:
+            context: ./nginx
+        depends_on:
+            - romdata
+            - catalog
+            - verify
+        ports:
+            - 80:80
+        volumes:
+            - logs:/logs
+
+    romdata:
         build:
             context: .
-            target: api_romdata
+            target: romdata
             args:
                 MAME_GIT_TAG: ${MAME_GIT_TAG}
-        ports:
-            - 9001:9001
 
-    api_catalog:
+    catalog:
         build:
             context: .
-            target: api_catalog
+            target: catalog
         depends_on:
-            - api_romdata
+            - romdata
         volumes:
             - ${PATH_HOST_ROMS}:/roms/:ro
             - catalog:/catalog/:rw
@@ -25,34 +35,33 @@ services:
             "--catalog_data_filename=/catalog/catalog.txt",
             "--catalog_mtime_filename=/catalog/mtimes.txt",
         ]
-        ports:
-            - 9002:9002
 
-
-    worker_catalog:
+    catalog_worker:
         build:
             context: .
-            target: worker_catalog
+            target: catalog_worker
         depends_on:
-            - api_catalog
+            - catalog
         volumes:
             - ${PATH_HOST_ROMS}:/roms/:ro
         command: [
             "--rom_path=/roms/",
-            "--url_api_catalog=http://api_catalog:9002",
+            "--url_api_catalog=http://catalog:9002",
         ]
 
-    api_verify:
+    verify:
         build:
             context: .
-            target: api_verify
+            target: verify
+        depends_on:
+            - romdata
+            - catalog
         command: [
-            "--url_api_romdata=http://api_romdata:9001",
-            "--url_api_catalog=http://api_catalog:9002",
+            "--url_api_romdata=http://romdata:9001",
+            "--url_api_catalog=http://catalog:9002",
         ]
-        ports:
-            - 9003:9003
 
 
 volumes:
     catalog:
+    logs:

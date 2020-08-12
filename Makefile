@@ -11,8 +11,9 @@ test:
 	pytest --doctest-modules -p no:cacheprovider
 
 run:
-	docker build --tag ${DOCKER_IMAGE}-temp --target requirements .
-	docker run --rm -it ${DOCKER_IMAGE}-temp /bin/sh
+	#docker build --tag ${DOCKER_IMAGE}-temp --target requirements .
+	#docker run --rm -it ${DOCKER_IMAGE}-temp /bin/sh
+	docker-compose up
 
 romdata:
 	python3 -m api_romdata.api api_romdata/roms.txt
