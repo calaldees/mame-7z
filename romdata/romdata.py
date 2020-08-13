@@ -10,6 +10,7 @@ from pathlib import Path
 import falcon
 
 from _common.roms import RomData
+from _common.falcon_helpers import add_sink, func_path_normalizer_no_extension
 
 log = logging.getLogger(__name__)
 
@@ -42,12 +43,6 @@ class SHA1InfoResource():
 class ArchiveResource():
     def __init__(self, rom_data):
         self.rom_data = rom_data
-    def _sink(self, request, response):
-        archive = Path(re.sub(r'^/archive/', '', request.path))  # HACK! The prefix route needs to be removed .. damnit ...
-        archive_name = os.path.join(archive.parent.name, archive.stem)
-        if not archive_name:
-            return self.on_index(request, response)  # This is really bad - my implementation of sink is horrible
-        return getattr(self, f'on_{request.method.lower()}')(request, response, archive_name)
     def on_index(self, request, response):
         response.media = tuple(self.rom_data.archive.keys())
         response.status = falcon.HTTP_200
@@ -108,7 +103,7 @@ def create_wsgi_app(rom_data_filename, **kwargs):
     app = falcon.API()
     app.add_route(r'/', IndexResource(rom_data))
     app.add_route(r'/sha1/{sha1}', SHA1InfoResource(rom_data))
-    app.add_sink(ArchiveResource(rom_data)._sink, prefix=r'/archive/')
+    add_sink(app, 'archive', ArchiveResource(rom_data), func_path_normalizer=func_path_normalizer_no_extension)
     app.add_route(r'/sets', SetsResource(rom_data))
     return app
 

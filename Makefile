@@ -16,7 +16,7 @@ run:
 	docker-compose up
 
 romdata:
-	python3 -m api_romdata.api api_romdata/roms.txt
+	python3 -m romdata.romdata romdata/roms.txt
 catalog:
 	python3 -m api_catalog.catalog /Users/allancallaghan/Applications/mame/roms/ api_catalog/catalog.txt
 worker_catalog:

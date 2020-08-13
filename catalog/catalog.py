@@ -9,6 +9,8 @@ import falcon
 
 from _common.scan import fast_scan
 from _common.roms import RomData, Rom
+from _common.falcon_helpers import add_sink, func_path_normalizer_no_extension
+
 
 log = logging.getLogger(__name__)
 
@@ -159,7 +161,7 @@ def create_wsgi_app(rom_path, catalog_data_filename, catalog_mtime_filename, **k
     app = falcon.API()
     app.add_route(r'/', IndexResource(catalog_data))
     app.add_route(r'/next_file', NextUntrackedFileResource(rom_path, catalog_data))
-    app.add_sink(ArchiveResource(catalog_data)._sink, prefix=r'/archive/')
+    add_sink(app, 'archive', ArchiveResource(catalog_data), func_path_normalizer=func_path_normalizer_no_extension)
 
     return app
 

@@ -35,6 +35,9 @@ services:
             "--catalog_data_filename=/catalog/catalog.txt",
             "--catalog_mtime_filename=/catalog/mtimes.txt",
         ]
+        ports:
+            - 9001:9001
+
 
     catalog_worker:
         build:
@@ -48,6 +51,9 @@ services:
             "--rom_path=/roms/",
             "--url_api_catalog=http://catalog:9002",
         ]
+        ports:
+            - 9002:9002
+
 
     verify:
         build:
@@ -60,6 +66,8 @@ services:
             "--url_api_romdata=http://romdata:9001",
             "--url_api_catalog=http://catalog:9002",
         ]
+        ports:
+            - 9003:9003
 
 
 volumes:

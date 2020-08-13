@@ -1,8 +1,11 @@
+import os
 from collections import defaultdict
 from functools import reduce
 
 import requests
 import falcon
+
+from _common.falcon_helpers import add_sink, func_path_normalizer_no_extension
 
 import logging
 log = logging.getLogger(__name__)
@@ -63,61 +66,34 @@ def verify_results(archive_name, roms, data):
     return _return
 
 
-# Local experiment -------------------------------------------------------------
-
-import os
-import tempfile
-
-from _common.roms import Rom
-from _common.scan import fast_scan
-from _common.p7zip import P7Zip
-
-p7zip = P7Zip()
-
-def verify_archive(f):
-    archive_name = os.path.join(f.folder, f.file_no_ext)
-    log.debug(f'validating {archive_name} {f.relative}')
-    with tempfile.TemporaryDirectory() as tempdir:
-        # Extract Archive - to tempdir
-        destination_folder = os.path.abspath(os.path.join(tempdir, archive_name))
-        os.makedirs(destination_folder)
-        p7zip.extract(
-            cwd=tempdir,
-            source_file=f.abspath,
-            destination_folder=destination_folder,
-        )
-        # Hash check archive content as Rom list
-        roms = tuple(
-            Rom(
-                sha1=p7zip.hash(tempdir, rom_file.abspath),
-                archive_name=archive_name,
-                file_name=rom_file.relative,
-            )
-            for rom_file in fast_scan(destination_folder)
-        )
-    # Verify roms
-    data = requests.get('http://localhost:9001/sets', json=tuple(rom.sha1 for rom in roms)).json()
-    return verify_results(archive_name, roms, data)
-
-
-def verify_folder(folder):
-    for f in fast_scan(folder):
-        if not f.exists:
-            log.warning(f'{f.relative} does not exist. The file may have been removed by another thread')
-            continue
-        is_valid = verify_archive(f)
-        log.info(f'{f.relative}: {is_valid=}')
-
 
 # ------------------------------------------------------------------------------
+
+class VerifyResource():
+    def __init__(self, get_romdata, get_catalog):
+        self.get_romdata = get_romdata
+        self.get_catalog = get_catalog
+    def on_get(self, request, response, archive_name):
+        response.media = {
+            'catalog': self.get_catalog(archive_name),
+            'romdata': self.get_romdata(archive_name),  # TODO: this is to call /sets/
+        }
+        response.status = falcon.HTTP_200
 
 
 # Setup App -------------------------------------------------------------------
 
 def create_wsgi_app(url_api_romdata, url_api_catalog, **kwargs):
+    def get_catalog(archive_name):
+        return requests.get(os.path.join(url_api_catalog, 'archive', archive_name)).json()
+    def get_romdata(archive_name):
+        # TODO: /sets/
+        return requests.get(os.path.join(url_api_romdata, 'archive', archive_name)).json()
+
+
     app = falcon.API()
     #app.add_route(r'/', IndexResource(rom_data))
-    #app.add_sink(VerifyResource(rom_data)._sink, prefix=r'/verify/')
+    add_sink(app, 'verify', VerifyResource(get_romdata, get_catalog), func_path_normalizer=func_path_normalizer_no_extension)
     return app
 
 
@@ -182,3 +158,53 @@ if __name__ == '__main__':
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
+
+
+
+
+
+# Local experiment -------------------------------------------------------------
+
+import os
+import tempfile
+
+from _common.roms import Rom
+from _common.scan import fast_scan
+from _common.p7zip import P7Zip
+
+p7zip = P7Zip()
+
+def verify_archive(f):
+    archive_name = os.path.join(f.folder, f.file_no_ext)
+    log.debug(f'validating {archive_name} {f.relative}')
+    with tempfile.TemporaryDirectory() as tempdir:
+        # Extract Archive - to tempdir
+        destination_folder = os.path.abspath(os.path.join(tempdir, archive_name))
+        os.makedirs(destination_folder)
+        p7zip.extract(
+            cwd=tempdir,
+            source_file=f.abspath,
+            destination_folder=destination_folder,
+        )
+        # Hash check archive content as Rom list
+        roms = tuple(
+            Rom(
+                sha1=p7zip.hash(tempdir, rom_file.abspath),
+                archive_name=archive_name,
+                file_name=rom_file.relative,
+            )
+            for rom_file in fast_scan(destination_folder)
+        )
+    # Verify roms
+    data = requests.get('http://localhost:9001/sets', json=tuple(rom.sha1 for rom in roms)).json()
+    return verify_results(archive_name, roms, data)
+
+
+def verify_folder(folder):
+    for f in fast_scan(folder):
+        if not f.exists:
+            log.warning(f'{f.relative} does not exist. The file may have been removed by another thread')
+            continue
+        is_valid = verify_archive(f)
+        log.info(f'{f.relative}: {is_valid=}')
+
