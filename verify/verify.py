@@ -1,11 +1,12 @@
 import os
 from collections import defaultdict
 from functools import reduce
+import json
 
 import requests
 import falcon
 
-from _common.falcon_helpers import add_sink, func_path_normalizer_no_extension
+from _common.falcon_helpers import add_sink, func_path_normalizer_no_extension, update_json_handlers
 
 import logging
 log = logging.getLogger(__name__)
@@ -13,29 +14,34 @@ logging.basicConfig(level=logging.INFO)
 
 
 
-def verify_results(archive_name, roms, data):
+def verify_results(archive_name, catalog, romdata):
+    """
+    catalog is the output form /archive/ endpoint dict(sha1, file_name) equivelent to Rom(sha1, archive_name, file_name)
+    romdata is output from /sets/ dict(romsets(archive_name(missing,)))
+    """
     _return = {}
     # Check archivename
     completed_archive_names = {
         _archive_name: not _data['missing']
-        for _archive_name, _data in data['romsets'].items()
+        for _archive_name, _data in romdata['romsets'].items()
     }
     if completed_archive_names and archive_name not in completed_archive_names:
         _return['rename_archive'] = {k for k, v in completed_archive_names.items() if v}
         if len(completed_archive_names) == 1:
             archive_name = next(completed_archive_names.__iter__())
     # TODO: if the archive needs to be renamed then verification terminates. Could we proceed with the assumption of the correct archive name?
-    romset = data['romsets'].get(archive_name)
+    romset = romdata['romsets'].get(archive_name)
     if not romset:
         log.warning(f'No romset data for {archive_name=}')
         return _return
     # Filenames
-    def _rename_files_reducer(acc, rom):
-        _expected_filename = romset['files'][rom.sha1]
-        if _expected_filename != rom.file_name:
-            acc[rom.sha1] = {'current': rom.file_name, 'expected': _expected_filename}
+    def _rename_files_reducer(acc, catalog_pair):
+        sha1, file_name = catalog_pair
+        _expected_filename = romset['files'][sha1]
+        if _expected_filename != file_name:
+            acc[sha1] = {'current': file_name, 'expected': _expected_filename}
         return acc
-    _return['rename_files'] = reduce(_rename_files_reducer, roms, {})
+    _return['rename_files'] = reduce(_rename_files_reducer, catalog.items(), {})
     # Missing
     def _clone_reducer(acc, missing_sha1):
         missing_filepath = romset['files'][missing_sha1]
@@ -48,19 +54,23 @@ def verify_results(archive_name, roms, data):
     _return['missing_clones'] = reduce(_clone_reducer, romset['missing'], defaultdict(set))
     _return['missing_core'] = _return['missing_clones'].pop('', None)
     # Unknown
-    _return['unknown'] = set(data['unknown'])
+    _return['unknown'] = set(romdata['unknown'])
     # Move
     identified_sha1s = set(romset['matched']) | _return['unknown']
-    def _move_reducer(acc, rom):
-        if rom.sha1 in identified_sha1s:
+    def _move_reducer(acc, catalog_pair):
+        sha1, file_name = catalog_pair
+        if sha1 in identified_sha1s:
             return acc
-        for _archive_name, _data in data['romsets'].items():
+        for _archive_name, _data in romdata['romsets'].items():
             if _archive_name in completed_archive_names:
                 continue
-            if rom.sha1 in set(_data['matched']):
-                acc.append((rom, Rom(rom.sha1, _archive_name, _data['files'][rom.sha1])))
+            if sha1 in set(_data['matched']):
+                acc.append((
+                    dict(sha1=sha1, archive_name=archive_name, file_name=file_name),
+                    dict(sha1=sha1, archive_name=_archive_name, file_name=_data['files'][sha1]),
+                ))
         return acc
-    _return['move'] = reduce(_move_reducer, roms, [])
+    _return['move'] = reduce(_move_reducer, catalog.items(), [])
 
     _return = {k: v for k, v in _return.items() if v}
     return _return
@@ -74,10 +84,9 @@ class VerifyResource():
         self.get_romdata = get_romdata
         self.get_catalog = get_catalog
     def on_get(self, request, response, archive_name):
-        response.media = {
-            'catalog': self.get_catalog(archive_name),
-            'romdata': self.get_romdata(archive_name),  # TODO: this is to call /sets/
-        }
+        catalog = self.get_catalog(archive_name)
+        romdata = self.get_romdata(catalog.keys())
+        response.media = verify_results(archive_name, catalog, romdata)
         response.status = falcon.HTTP_200
 
 
@@ -86,14 +95,18 @@ class VerifyResource():
 def create_wsgi_app(url_api_romdata, url_api_catalog, **kwargs):
     def get_catalog(archive_name):
         return requests.get(os.path.join(url_api_catalog, 'archive', archive_name)).json()
-    def get_romdata(archive_name):
-        # TODO: /sets/
-        return requests.get(os.path.join(url_api_romdata, 'archive', archive_name)).json()
+    def get_romdata(sha1s):
+        return requests.get(
+            os.path.join(url_api_romdata, 'sets'),
+            json=tuple(sha1s),
+            headers={'Content-Type': 'application/json'},
+        ).json()
 
 
     app = falcon.API()
     #app.add_route(r'/', IndexResource(rom_data))
     add_sink(app, 'verify', VerifyResource(get_romdata, get_catalog), func_path_normalizer=func_path_normalizer_no_extension)
+    update_json_handlers(app)
     return app
 
 
