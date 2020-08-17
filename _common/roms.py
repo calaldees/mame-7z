@@ -33,13 +33,16 @@ class RomData():
     """
     Romdata for 364682 in python3 memory takes 185Mb RAM
     """
-    def __init__(self, rom_data_filename, readonly=True):
+    def __init__(self, filehandle, readonly=True):
         self.sha1 = {}
         self.archive = {}
-        if not os.path.isfile(rom_data_filename):
-            log.warning(f'No Rom data loaded - {rom_data_filename} does not exist')
-            return
-        filehandle = open(rom_data_filename, 'rt')
+
+        if isinstance(filehandle, str):
+            if not os.path.isfile(filehandle):
+                log.warning(f'No Rom data loaded - {filehandle} does not exist')
+                return  # sort of a bug because readonly is not preserved
+            filehandle = open(filehandle, 'rt')
+
         log.info('Loading rom data ...')
         count = 0
         for count, rom in enumerate(filter(None, map(Rom.parse, filehandle))):
@@ -49,7 +52,9 @@ class RomData():
                 print('.', end='', flush=True)
         print()
         log.info(f'Loaded dataset for {count} roms')
+
         if readonly:
             self.sha1 = MappingProxyType(self.sha1)
             self.archive = MappingProxyType(self.archive)
-        filehandle.close()
+        if hasattr(filehandle, 'close'):
+            filehandle.close()

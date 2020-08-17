@@ -48,6 +48,16 @@ class CatalogData(RomData):
         with open(self.catalog_mtime_filename, 'w') as filehandle:
             for archive_name, mtime in self.mtime.items():
                     filehandle.write(f'{archive_name}:{mtime}\n')
+    def remove(self, archive_name):
+        raise NotImplementedError()
+    def remove_rom(self, rom):
+        """
+        TODO: doctest
+        """
+        _roms_with_sha1 = self.sha1.get(rom.sha1)
+        _roms_with_sha1.discard({r for r in _roms_with_sha1 if r.archive_name == rom.archive_name})
+        _roms_from_archive_name = self.archive.get(rom.archive_name)
+        _roms_from_archive_name.discard({r for r in _roms_from_archive_name if r.sha1 == rom.sha1})
     def replace_roms(self, roms):
         """
         TODO: doctest
@@ -107,6 +117,7 @@ class ArchiveResource():
             #}
         }
     def on_post(self, request, response, archive_name):
+        raise NotImplementedError()
         self.catalog_data.replace_roms(Rom(**rom_dict) for rom_dict in request.media['roms'])
         self.catalog_data.mtime[archive_name] = request.media['mtime']
         response.status = falcon.HTTP_200
@@ -120,15 +131,20 @@ class NextUntrackedFileResource():
         self._last_scan = None
     def _rescan_files(self):
         self._last_scan = datetime.datetime.now()
-        def _filter_files(f):
-            return (
-                f.exists
-                and
-                str(f.stats.st_mtime) != self.catalog_data.mtime.get(
-                    os.path.join(f.folder, f.file_no_ext)
-                )
-            )
-        self._files = list(filter(_filter_files, fast_scan(self.path)))
+        archive_names = set()
+        archive_names_changed = set()
+        for f in fast_scan(self.path):
+            archive_name = os.path.join(f.folder, f.file_no_ext)
+            archive_names.add(archive_name)
+            archive_has_changed = str(f.stats.st_mtime) != self.catalog_data.mtime.get(archive_name)
+            if archive_has_changed:
+                archive_names_changed.add(archive_name)
+        self._files = archive_names_changed
+        # Remove deleted files
+        deleted_archives = set(self.catalog_data.archive.keys()) - archive_names
+        for archive_name in deleted_archives:
+            self.catalog_data.remove(archive_name)
+
     @property
     def files(self):
         if (
