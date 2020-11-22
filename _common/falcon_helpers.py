@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 from functools import partial
 import json
+from types import MappingProxyType
 
 from falcon import media
 
@@ -23,7 +24,7 @@ def func_path_normalizer_no_extension(path):
 
 def update_json_handlers(app):
     def _json_dumps(obj):
-        if isinstance(obj, dict):
+        if isinstance(obj, (dict, MappingProxyType)):
             return dict(obj)
         if isinstance(obj, set):
             return tuple(obj)
